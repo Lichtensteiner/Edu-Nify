@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, CalendarCheck, FileText, Settings, BookOpen, Code, LogOut, ScanLine, Smartphone, CreditCard, Trophy, ScanFace, Activity, GraduationCap, UserCircle, Castle, X, Download, Calendar as CalendarIcon, MessageSquare, BookUser, MessageCircle, Info, Sparkles, Wallet, ShieldAlert, History, Award, ShieldCheck, Scale, Utensils, Library, Vote, FileBadge, Building2, FolderClosed, Cpu } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarCheck, FileText, Settings, BookOpen, Code, LogOut, ScanLine, Smartphone, CreditCard, Trophy, ScanFace, Activity, GraduationCap, UserCircle, Castle, X, Calendar as CalendarIcon, MessageSquare, BookUser, MessageCircle, Info, Sparkles, Wallet, ShieldAlert, History, Award, ShieldCheck, Scale, Utensils, Library, Vote, FileBadge, Building2, FolderClosed, Cpu } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useEstablishment } from '../contexts/EstablishmentContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { usePWA } from '../hooks/usePWA';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
@@ -22,7 +21,6 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                        currentUser?.preciseRole === 'Super Admin' ||
                        currentUser?.preciseRole === 'Super Administrateur';
   const { t, tData } = useLanguage();
-  const { isStandalone } = usePWA();
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -274,39 +272,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
           })}
         </div>
 
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 shrink-0 space-y-3">
-          {isStandalone ? (
-            <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-xl text-xs font-semibold border border-emerald-100 dark:border-emerald-800/30">
-              <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Application installée ✓
-            </div>
-          ) : (
-            <button 
-              onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-install-guide'))}
-              className="w-full flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-xs font-bold transition-all active:scale-95 shadow-md shadow-indigo-600/10 cursor-pointer"
-            >
-              <Download size={16} className="text-indigo-200 shrink-0 animate-bounce" />
-              <span>Installer l'application</span>
-            </button>
-          )}
-
-          {currentUser && (
-            <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600 mb-2">
-              {currentUser.photo ? (
-                <img src={currentUser.photo} alt="" className="w-10 h-10 rounded-full object-cover shadow-sm" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm uppercase shadow-sm">
-                  {currentUser.prenom?.[0] || currentUser.email?.[0] || 'U'}
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
-                  {currentUser.prenom || currentUser.nom ? `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim() : currentUser.email?.split('@')[0] || 'Utilisateur'}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize truncate">{tData(currentUser.role)}</p>
-              </div>
-            </div>
-          )}
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700 shrink-0">
           <button 
             onClick={logout}
             className="w-full flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-colors"

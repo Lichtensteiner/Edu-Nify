@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { 
-  FileText, Download, Cpu, Layers, Globe, Building2, 
+  Cpu, Layers, Globe, Building2, 
   Sparkles, ShieldCheck, User, Info, CheckCircle2, ChevronRight,
   BookOpen, HelpCircle, Code, Printer
 } from 'lucide-react';
@@ -478,18 +478,6 @@ export default function TechSheet() {
     `;
   };
 
-  const handleDownloadWord = () => {
-    const htmlContent = getDocumentHTML();
-    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'EDU_NIFY_GUIDE_COMPLET_OFFICIEL.doc');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const handleDownloadPDF = () => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
@@ -579,21 +567,15 @@ export default function TechSheet() {
               Edu-Nify Support & Document de Conception
             </h1>
             <p className="text-indigo-200 text-sm sm:text-base font-sans font-light leading-relaxed">
-              Consultez l'architecture, la configuration multi-systèmes d'Edu-Nify et téléchargez le guide complet et détaillé de la plateforme sous le format professionnel de votre choix (PDF ou Microsoft Word) réservé exclusivement aux administrateurs.
+              Consultez l'architecture, la configuration multi-systèmes d'Edu-Nify et téléchargez le guide complet et détaillé de la plateforme sous format professionnel PDF, réservé exclusivement aux administrateurs.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 shrink-0">
             <button 
-              onClick={handleDownloadWord}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-2xl transition duration-200 shadow-lg active:scale-95"
-            >
-              <FileText className="w-5 h-5" /> Télécharger en Word (.doc)
-            </button>
-            <button 
               onClick={handleDownloadPDF}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-2xl transition duration-200 shadow-lg active:scale-95"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition duration-200 shadow-lg active:scale-95 cursor-pointer"
             >
-              <Printer className="w-5 h-5" /> Enregistrer en PDF
+              <Printer className="w-5 h-5" /> Télécharger / Imprimer en PDF
             </button>
           </div>
         </div>
