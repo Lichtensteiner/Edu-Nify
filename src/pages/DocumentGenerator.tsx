@@ -23,6 +23,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
 import { Palette, Sparkles, AlertCircle, RefreshCw, Layers } from 'lucide-react';
+import { EDU_NIFY_LOGO_BASE64 } from '../lib/logo';
 
 interface Student {
   id: string;
@@ -295,7 +296,8 @@ Génère une réponse sous forme d'un objet JSON pur et valide (sans aucun blabl
         const dataUrl = await getImageDataUrl('/logo.png');
         setLogoDataUrl(dataUrl);
       } catch (e) {
-        console.warn("Could not pre-load logo", e);
+        console.warn("Could not pre-load logo, falling back to embedded logo", e);
+        setLogoDataUrl(EDU_NIFY_LOGO_BASE64);
       }
     };
     loadLogo();

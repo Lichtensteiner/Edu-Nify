@@ -6,6 +6,7 @@ import {
   BookOpen, HelpCircle, Code, Printer
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { EDU_NIFY_LOGO_BASE64 } from '../lib/logo';
 
 export default function TechSheet() {
   const { t } = useLanguage();
@@ -90,7 +91,7 @@ export default function TechSheet() {
         <div class="cover">
           <!-- Logo Edu-Nify -->
           <div style="margin-bottom: 30px; text-align: center;">
-            <img src="${window.location.origin}/logo.png" alt="Edu-Nify Logo" style="height: 100px; width: 100px; object-fit: contain; display: block; margin: 0 auto 12px auto;" />
+            <img src="${EDU_NIFY_LOGO_BASE64}" alt="Edu-Nify Logo" style="height: 100px; width: 100px; object-fit: contain; display: block; margin: 0 auto 12px auto;" />
           </div>
           <div class="cover-badge">DOCUMENT TECHNIQUE ET FONCTIONNEL OFFICIEL</div>
           <div class="cover-subtitle">Plateforme Intelligente de Gestion Scolaire, Pédagogique, Administrative et Collaborative</div>

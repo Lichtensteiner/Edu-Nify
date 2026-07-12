@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { EDU_NIFY_LOGO_BASE64 } from '../lib/logo';
 
 // Helper to convert hex to RGB
 function hexToRgb(hex: string): [number, number, number] {
@@ -13,39 +14,44 @@ function hexToRgb(hex: string): [number, number, number] {
 
 // Helper to get raw image data URL using a 100% CORS-safe fetch-to-blob-to-base64 reader
 const fetchImageAsBase64 = async (url: string): Promise<string> => {
-  if (!url) return '';
+  if (!url) return EDU_NIFY_LOGO_BASE64;
   if (url.startsWith('data:')) return url;
   try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (err) {
-    // Fallback to traditional Image canvas loader
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      if (url.startsWith('http') && !url.includes(window.location.host)) {
-        img.crossOrigin = 'Anonymous';
-      }
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/png'));
-        } catch (e) {
-          reject(e);
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      // Fallback to traditional Image canvas loader
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        if (url.startsWith('http') && !url.includes(window.location.host)) {
+          img.crossOrigin = 'Anonymous';
         }
-      };
-      img.onerror = () => reject(new Error(`Could not load image at ${url}`));
-      img.src = url;
-    });
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (e) {
+            reject(e);
+          }
+        };
+        img.onerror = () => reject(new Error(`Could not load image at ${url}`));
+        img.src = url;
+      });
+    }
+  } catch (outerErr) {
+    console.warn("Could not fetch image, falling back to embedded Edu-Nify logo", outerErr);
+    return EDU_NIFY_LOGO_BASE64;
   }
 };
 
