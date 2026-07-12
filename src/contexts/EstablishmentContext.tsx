@@ -1,0 +1,236 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { collection, doc, onSnapshot, setDoc, getDocs, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { useAuth } from './AuthContext';
+
+export interface Establishment {
+  id: string; // e.g. "EDU-001"
+  code: string;
+  nom: string;
+  logo: string;
+  banner: string;
+  devise: string;
+  adresse: string;
+  telephone: string;
+  email: string;
+  siteWeb: string;
+  active: boolean;
+  dateCreation: string;
+  licence: string;
+  plan: 'Basic' | 'Standard' | 'Premium' | 'Enterprise';
+  primaryColor: string; // Hex code
+  secondaryColor: string; // Hex code
+  activeSchoolYear: string;
+  systemeScolaire?: string; // "Système Franco-Canadien" | "Système Français" | "Système Privé Gabonais" | "Système Public Gabonais" | "École Bilingue" | "École Conventionnée"
+  systemeCustomNameChef?: string; // Chef d'établissement (Proviseur, Principal, Directeur, etc.)
+  systemeCustomPeriodes?: string; // Trimestres, Semestres, Sessions
+  systemeCustomNotes?: string; // Moyenne sur 20, GPA 4.0, Lettres (A-F), Pourcentage (%)
+  systemeCustomExamens?: string[]; // Examens d'État / Officiels (Bac, BEPC, etc.)
+  systemeCustomVacances?: string; // Calendrier des vacances / congés scolaires spécifiques
+  systemeCustomNiveaux?: string; // Classes, Grades, Niveaux
+  biometrieObligatoire?: boolean; // Whether biometric registration is mandatory for all students/users
+  // Principal / representative details (Proviseur / Principal / Directeur)
+  responsableCivility?: 'M.' | 'Mme' | 'Dr' | 'Pr';
+  responsableNom?: string;
+  responsablePrenom?: string;
+  responsableEmail?: string;
+  responsableTelephone?: string;
+}
+
+interface EstablishmentContextType {
+  establishments: Establishment[];
+  currentEstablishment: Establishment | null;
+  activeEstablishmentId: string | null;
+  changeActiveEstablishment: (id: string) => void;
+  loading: boolean;
+  isSuperAdmin: boolean;
+  createEstablishment: (est: Omit<Establishment, 'dateCreation'>) => Promise<void>;
+  updateEstablishment: (id: string, updates: Partial<Establishment>) => Promise<void>;
+  toggleEstablishmentStatus: (id: string) => Promise<void>;
+}
+
+const EstablishmentContext = createContext<EstablishmentContextType | null>(null);
+
+const DEFAULT_ESTABLISHMENTS: Establishment[] = [
+  {
+    id: 'EDU-001',
+    code: 'LUDO-CONSULTING',
+    nom: 'Ludo_Consulting',
+    logo: '',
+    banner: '',
+    devise: 'Science - Éthique - Progrès',
+    adresse: 'Libreville, Gabon',
+    telephone: '+241 07 00 00 00',
+    email: 'ludo.consulting3@gmail.com',
+    siteWeb: 'https://ludo-consulting.com',
+    active: true,
+    dateCreation: new Date().toISOString(),
+    licence: 'LIC-EDU-2026-VALIDE',
+    plan: 'Premium',
+    primaryColor: '#4f46e5',
+    secondaryColor: '#ea580c',
+    activeSchoolYear: '2025-2026',
+    systemeScolaire: 'Système Public Gabonais',
+    responsableCivility: 'M.',
+    responsableNom: 'Mve Zogo',
+    responsablePrenom: 'Ludovic Martinien',
+    responsableEmail: 'ludo.consulting3@gmail.com',
+    responsableTelephone: '+241 07 00 00 00'
+  }
+];
+
+export const EstablishmentProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser } = useAuth();
+  const [establishments, setEstablishments] = useState<Establishment[]>([]);
+  const [currentEstablishment, setCurrentEstablishment] = useState<Establishment | null>(null);
+  const [activeEstablishmentId, setActiveEstablishmentId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Check if current user is global platform owner (Super Admin)
+  const isSuperAdmin = currentUser?.email?.toLowerCase().trim() === 'martinienmvezogo@gmail.com' ||
+                       currentUser?.preciseRole === 'Super Admin' ||
+                       currentUser?.preciseRole === 'Super Administrateur';
+
+  // Seed establishments if empty
+  useEffect(() => {
+    const seedIfNeeded = async () => {
+      try {
+        // 1. Specifically verify and seed EDU-001 (Ludo_Consulting)
+        const mainDocRef = doc(db, 'etablissements', 'EDU-001');
+        const mainDocSnap = await getDoc(mainDocRef);
+        
+        if (!mainDocSnap.exists()) {
+          console.log('Seeding primary establishment (Ludo_Consulting) to Firestore...');
+          await setDoc(mainDocRef, DEFAULT_ESTABLISHMENTS[0]);
+        }
+
+        // 2. Fallback check for any other defaults if collection is empty
+        const querySnapshot = await getDocs(collection(db, 'etablissements'));
+        if (querySnapshot.empty) {
+          console.log('Seeding default establishments inside Firestore...');
+          for (const est of DEFAULT_ESTABLISHMENTS) {
+            await setDoc(doc(db, 'etablissements', est.id), est);
+          }
+        }
+      } catch (err: any) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.includes('offline') || !navigator.onLine) {
+          console.warn('Seeding skipped: client is offline.');
+        } else {
+          console.error('Error seeding default establishments:', err);
+        }
+      }
+    };
+    seedIfNeeded();
+  }, []);
+
+  // Listen to establishments collection in real-time
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'etablissements'), (snapshot) => {
+      const list: Establishment[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as Establishment);
+      });
+      setEstablishments(list);
+      setLoading(false);
+    }, (err) => {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes('offline') || !navigator.onLine) {
+        console.warn('Etablissements listen warning (offline):', errMsg);
+      } else {
+        console.error('Error listening to etablissements:', err);
+      }
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
+
+  // Match the active establishment to user's assigned establishment or selected one
+  useEffect(() => {
+    if (establishments.length === 0) return;
+
+    if (isSuperAdmin) {
+      // Super admin can select which campus to view
+      const selectedId = activeEstablishmentId || localStorage.getItem('active-tenant-id');
+      const found = establishments.find(e => e.id === selectedId) || establishments.find(e => e.active) || establishments[0];
+      setCurrentEstablishment(found);
+      if (found && found.id !== activeEstablishmentId) {
+        setActiveEstablishmentId(found.id);
+        localStorage.setItem('active-tenant-id', found.id);
+      }
+    } else {
+      // Normal users are strictly isolated to their assigned establishment field
+      const userEtab = currentUser?.etablissement || 'EDU-001';
+      const found = establishments.find(e => e.id === userEtab) || establishments.find(e => e.id === 'EDU-001') || establishments[0];
+      setCurrentEstablishment(found);
+      if (found) {
+        setActiveEstablishmentId(found.id);
+      }
+    }
+  }, [establishments, currentUser, activeEstablishmentId, isSuperAdmin]);
+
+  // Inject CSS Variables for Dynamic Branding
+  useEffect(() => {
+    if (currentEstablishment) {
+      const primary = currentEstablishment.primaryColor || '#4f46e5';
+      const secondary = currentEstablishment.secondaryColor || '#ea580c';
+      
+      // Update HTML root style variables
+      document.documentElement.style.setProperty('--color-primary-custom', primary);
+      document.documentElement.style.setProperty('--color-secondary-custom', secondary);
+      
+      console.log(`Branding dynamically applied for: ${currentEstablishment.nom} (${primary} / ${secondary})`);
+    }
+  }, [currentEstablishment]);
+
+  const changeActiveEstablishment = (id: string) => {
+    if (!isSuperAdmin) return;
+    setActiveEstablishmentId(id);
+    localStorage.setItem('active-tenant-id', id);
+  };
+
+  const createEstablishment = async (est: Omit<Establishment, 'dateCreation'>) => {
+    const newEst: Establishment = {
+      ...est,
+      dateCreation: new Date().toISOString()
+    };
+    await setDoc(doc(db, 'etablissements', est.id), newEst);
+  };
+
+  const updateEstablishment = async (id: string, updates: Partial<Establishment>) => {
+    await setDoc(doc(db, 'etablissements', id), updates, { merge: true });
+  };
+
+  const toggleEstablishmentStatus = async (id: string) => {
+    const target = establishments.find(e => e.id === id);
+    if (!target) return;
+    await setDoc(doc(db, 'etablissements', id), { active: !target.active }, { merge: true });
+  };
+
+  return (
+    <EstablishmentContext.Provider
+      value={{
+        establishments,
+        currentEstablishment,
+        activeEstablishmentId,
+        changeActiveEstablishment,
+        loading,
+        isSuperAdmin,
+        createEstablishment,
+        updateEstablishment,
+        toggleEstablishmentStatus
+      }}
+    >
+      {children}
+    </EstablishmentContext.Provider>
+  );
+};
+
+export const useEstablishment = () => {
+  const context = useContext(EstablishmentContext);
+  if (!context) {
+    throw new Error('useEstablishment must be used within an EstablishmentProvider');
+  }
+  return context;
+};

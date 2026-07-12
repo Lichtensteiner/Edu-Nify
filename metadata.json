@@ -1,0 +1,14 @@
+{
+  "name": "Edu-Nify",
+  "description": "Système de gestion de présence biométrique et académique pour l'école internationale Edu-Nify, incluant suivi PWA et rapports.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation",
+    "publickey-credentials-get",
+    "publickey-credentials-create"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

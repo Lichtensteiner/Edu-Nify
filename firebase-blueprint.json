@@ -1,0 +1,621 @@
+{
+  "entities": {
+    "users": {
+      "title": "Users",
+      "description": "User profiles including students, teachers and admins",
+      "type": "object",
+      "properties": {
+        "nom": { "type": "string" },
+        "prenom": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["Super Administrateur", "Administrateur d'établissement", "Enseignant", "Élève", "Parent", "Comptable", "Surveillant", "Bibliothécaire", "admin", "enseignant", "élève", "parent", "personnel administratif", "cuisinier"] },
+        "classe": { "type": "string" },
+        "matricule": { "type": "string" },
+        "photo": { "type": "string" },
+        "cover_photo": { "type": "string" },
+        "biographie": { "type": "string" },
+        "matieres": { "type": "array", "items": { "type": "string" } },
+        "gender": { "type": "string" },
+        "age": { "type": "number" },
+        "address": { "type": "string" },
+        "contact": { "type": "string" },
+        "date_creation": { "type": "string", "format": "date-time" },
+        "face_id": { "type": "string" },
+        "fingerprint_id": { "type": "string" },
+        "credential_id": { "type": "string" },
+        "maison": { "type": "string" },
+        "mustChangePassword": { "type": "boolean" },
+        "temporaryPassword": { "type": "string" },
+        "etablissement": { "type": "string" }
+      }
+    },
+    "attendance": {
+      "title": "Daily Attendance Summary",
+      "description": "Summary of user attendance per day",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "heure_arrivee": { "type": "string" },
+        "heure_depart": { "type": "string" },
+        "statut": { "type": "string", "enum": ["Présent", "Retard", "Absent"] },
+        "current_state": { "type": "string", "enum": ["présent", "sorti"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "attendance_logs": {
+      "title": "Detailed Attendance Logs",
+      "description": "Individual scan entries for entry and exit",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "user_name": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "time": { "type": "string" },
+        "type": { "type": "string", "enum": ["entrée", "sortie"] },
+        "isLate": { "type": "boolean" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "clubs": {
+      "title": "Clubs",
+      "description": "School clubs and extracurricular activities",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "leaderId": { "type": "string" },
+        "leaderName": { "type": "string" },
+        "category": { "type": "string" },
+        "members": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "grades": {
+      "title": "Grades",
+      "description": "Student evaluation scores",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "subject": { "type": "string" },
+        "score": { "type": "number" },
+        "maxScore": { "type": "number" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["interrogation", "evaluation"] },
+        "date": { "type": "string", "format": "date-time" }
+      }
+    },
+    "sanctions": {
+      "title": "Discipline Sanctions",
+      "description": "Disciplinary records for students",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "type": { "type": "string", "enum": ["warning", "detention", "exclusion"] },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "completed", "cancelled"] },
+        "recordedBy": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" }
+      }
+    },
+    "homework": {
+      "title": "Homework",
+      "description": "Assignments and lesson contents",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "subject": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "completedBy": { "type": "array", "items": { "type": "string" } },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "preparations": {
+      "title": "Courses and Preparations",
+      "description": "Educational content and AI-generated lesson plans",
+      "type": "object",
+      "properties": {
+        "topic": { "type": "string" },
+        "subject": { "type": "string" },
+        "grade": { "type": "string" },
+        "content": { "type": "string" },
+        "type": { "type": "string", "enum": ["course", "exercise", "quiz"] },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "notifications": {
+      "title": "Notifications",
+      "description": "System and user notifications",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "type": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["sent", "read"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "user_sessions": {
+      "title": "User Sessions",
+      "description": "Active and past user login sessions with device and location info",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "device": { "type": "string" },
+        "os": { "type": "string" },
+        "browser": { "type": "string" },
+        "location": { "type": "string" },
+        "ip": { "type": "string" },
+        "lastActive": { "type": "string", "format": "date-time" },
+        "userAgent": { "type": "string" },
+        "isMobile": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      }
+    },
+    "teacher_planning": {
+      "title": "Teacher Planning",
+      "description": "Daily schedule and tasks for teachers",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "type": { "type": "string", "enum": ["cours", "réunion", "examen", "autre"] },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "subject": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "strategic_optimizations": {
+      "title": "Strategic Optimizations",
+      "description": "Historical real-time optimization logs to store system corrections.",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "optimizedBy": { "type": "object" },
+        "recommendationText": { "type": "string" },
+        "actionsOptimized": { "type": "array", "items": { "type": "string" } },
+        "schoolStats": { "type": "object" }
+      }
+    },
+    "role_responsibilities": {
+      "title": "Role Responsibilities",
+      "description": "Page permissions, roles and tasks.",
+      "type": "object",
+      "properties": {
+        "pageId": { "type": "string" },
+        "pageLabel": { "type": "string" },
+        "role": { "type": "string" },
+        "canView": { "type": "boolean" },
+        "canEdit": { "type": "boolean" },
+        "canDelete": { "type": "boolean" },
+        "mission": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      }
+    },
+    "maternelle_siestas": {
+      "title": "Maternelle Siestas",
+      "description": "Real-time sleep and rest monitoring for kindergarten children",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "classroom": { "type": "string" },
+        "status": { "type": "string", "enum": ["awake", "resting", "sleeping"] }
+      },
+      "required": ["name", "classroom", "status"]
+    },
+    "maternelle_transmissions": {
+      "title": "Maternelle Transmissions",
+      "description": "Daily notes and reports shared with kindergarten parents",
+      "type": "object",
+      "properties": {
+        "kidName": { "type": "string" },
+        "notes": { "type": "string" },
+        "bottles": { "type": "number" },
+        "date": { "type": "string" }
+      },
+      "required": ["kidName", "notes", "bottles", "date"]
+    },
+    "resp_reading_progress": {
+      "title": "Responsibility - Reading Progress",
+      "description": "Progress entries for primary school reading challenge",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "booksRead": { "type": "number" },
+        "goal": { "type": "number" },
+        "rating": { "type": "string" }
+      },
+      "required": ["name", "booksRead", "goal", "rating"]
+    },
+    "resp_field_trips": {
+      "title": "Responsibility - Primary Field Trips",
+      "description": "Educational outing authorization logs",
+      "type": "object",
+      "properties": {
+        "destination": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["approved", "pending", "rejected"] }
+      },
+      "required": ["destination", "date", "status"]
+    },
+    "resp_college_detentions": {
+      "title": "Responsibility - College Detentions",
+      "description": "After-school or weekend detention logs for college students",
+      "type": "object",
+      "properties": {
+        "student": { "type": "string" },
+        "reason": { "type": "string" },
+        "teacher": { "type": "string" },
+        "date": { "type": "string" },
+        "hour": { "type": "string" },
+        "proctor": { "type": "string" }
+      },
+      "required": ["student", "reason", "teacher", "date", "hour", "proctor"]
+    },
+    "resp_brevet_chapters": {
+      "title": "Responsibility - Brevet Chapters Progress",
+      "description": "National exam preparation program checkpoints",
+      "type": "object",
+      "properties": {
+        "subject": { "type": "string" },
+        "topic": { "type": "string" },
+        "status": { "type": "string", "enum": ["ready", "pending"] }
+      },
+      "required": ["subject", "topic", "status"]
+    },
+    "resp_accounting_flows": {
+      "title": "Responsibility - Accounting Flows",
+      "description": "Daily real-time financial ledger receipts and expenses",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["inflow", "outflow"] },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["type", "category", "amount", "description", "date"]
+    },
+    "resp_remedial_groups": {
+      "title": "Responsibility - Remedial Groups",
+      "description": "Syllabus remedial teaching and tutorial groups",
+      "type": "object",
+      "properties": {
+        "studentName": { "type": "string" },
+        "subject": { "type": "string" },
+        "level": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["studentName", "subject", "level", "date"]
+    },
+    "resp_syllabus_rates": {
+      "title": "Responsibility - Syllabus Rates",
+      "description": "Progress rates for academic syllabi completion",
+      "type": "object",
+      "properties": {
+        "course": { "type": "string" },
+        "teacher": { "type": "string" },
+        "rate": { "type": "number" }
+      },
+      "required": ["course", "teacher", "rate"]
+    },
+    "resp_late_slips": {
+      "title": "Responsibility - Late Slips",
+      "description": "Late arriving students tickets and delay parameters",
+      "type": "object",
+      "properties": {
+        "studentName": { "type": "string" },
+        "duration": { "type": "number" },
+        "reason": { "type": "string" },
+        "date": { "type": "string" },
+        "hasTicket": { "type": "boolean" }
+      },
+      "required": ["studentName", "duration", "reason", "date", "hasTicket"]
+    },
+    "resp_visitors_log": {
+      "title": "Responsibility - Visitors Log",
+      "description": "Gate registry for visitors and access logging",
+      "type": "object",
+      "properties": {
+        "visitorName": { "type": "string" },
+        "reason": { "type": "string" },
+        "targetPerson": { "type": "string" },
+        "entryTime": { "type": "string" },
+        "status": { "type": "string", "enum": ["inside", "left"] }
+      },
+      "required": ["visitorName", "reason", "targetPerson", "entryTime", "status"]
+    },
+    "resp_locker_keys": {
+      "title": "Responsibility - Locker Keys Consignation",
+      "description": "Locker key loans log for student lockers",
+      "type": "object",
+      "properties": {
+        "lockerNo": { "type": "string" },
+        "student": { "type": "string" },
+        "date": { "type": "string" },
+        "returned": { "type": "boolean" }
+      },
+      "required": ["lockerNo", "student", "date", "returned"]
+    },
+    "resp_clean_zones": {
+      "title": "Responsibility - Clean Zones",
+      "description": "Janitorial plan and hygiene checklist",
+      "type": "object",
+      "properties": {
+        "zone": { "type": "string" },
+        "frequency": { "type": "string" },
+        "lastCleaned": { "type": "string" },
+        "status": { "type": "string", "enum": ["cleaned", "pending"] }
+      },
+      "required": ["zone", "frequency", "lastCleaned", "status"]
+    },
+    "resp_cleaning_supplies": {
+      "title": "Responsibility - Cleaning Supplies",
+      "description": "Cleaning supply stock levels and reordering signals",
+      "type": "object",
+      "properties": {
+        "item": { "type": "string" },
+        "stock": { "type": "number" },
+        "limit": { "type": "number" }
+      },
+      "required": ["item", "stock", "limit"]
+    },
+    "resp_dossiers": {
+      "title": "Responsibility - Candidate Dossiers",
+      "description": "Candidate registrations and new student enrollments tracking",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "level": { "type": "string" },
+        "originSchool": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] }
+      },
+      "required": ["name", "level", "originSchool", "status"]
+    },
+    "resp_secretaire_tasks": {
+      "title": "Responsibility - Secretary General Tasks",
+      "description": "Task management items for Secretary General with Office of Directorate option",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "scope": { "type": "string", "enum": ["Secrétariat Général", "Bureau Direction", "Responsable Pédagogique", "Responsable Maternelle", "Responsable Collège", "Responsable Primaire", "Responsable IT (Matériels informatiques)"] },
+        "completed": { "type": "boolean" }
+      },
+      "required": ["title", "description", "dueDate", "priority", "scope", "completed"]
+    },
+    "resp_phone_calls": {
+      "title": "Responsibility - Phone Calls Log",
+      "description": "Adjoint secretariat telephone message logs",
+      "type": "object",
+      "properties": {
+        "caller": { "type": "string" },
+        "message": { "type": "string" },
+        "targetStudent": { "type": "string" },
+        "status": { "type": "string", "enum": ["noted", "relayed"] }
+      },
+      "required": ["caller", "message", "targetStudent", "status"]
+    },
+    "resp_it_loans": {
+      "title": "Responsibility - IT Resource Loans",
+      "description": "IT tablet carts, laptop or projector schoolroom rentals",
+      "type": "object",
+      "properties": {
+        "cartId": { "type": "string" },
+        "classTarget": { "type": "string" },
+        "duration": { "type": "string" },
+        "status": { "type": "string", "enum": ["borrowed", "returned"] }
+      },
+      "required": ["cartId", "classTarget", "duration", "status"]
+    },
+    "resp_it_tickets": {
+      "title": "Responsibility - IT Support Tickets",
+      "description": "IT infrastructure defects, outages and status",
+      "type": "object",
+      "properties": {
+        "item": { "type": "string" },
+        "description": { "type": "string" },
+        "severity": { "type": "string", "enum": ["minor", "critical"] },
+        "status": { "type": "string", "enum": ["open", "investigating", "resolved"] }
+      },
+      "required": ["item", "description", "severity", "status"]
+    },
+    "access_requests": {
+      "title": "Access Requests",
+      "description": "Public sign-up validation and on-boarding requests",
+      "type": "object",
+      "properties": {
+        "nom": { "type": "string" },
+        "prenom": { "type": "string" },
+        "telephone": { "type": "string" },
+        "role": { "type": "string" },
+        "lieu_naissance": { "type": "string" },
+        "date_naissance": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "date_demande": { "type": "string" },
+        "date_decision": { "type": "string" },
+        "decision_by": { "type": "string" }
+      },
+      "required": ["nom", "prenom", "telephone", "role", "status", "date_demande"]
+    },
+    "bulletin_rights": {
+      "title": "Bulletin Delegated Rights",
+      "description": "Permissions delegated by admins to other staff members to publish student report cards",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "canPublish": { "type": "boolean" },
+        "delegatedBy": { "type": "string" },
+        "delegatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "canPublish"]
+    },
+    "bulletins": {
+      "title": "Student Bulletins Scolaires",
+      "description": "Structured quarterly report cards for students with grades, remarks, absences and class decisions",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "classe": { "type": "string" },
+        "period": { "type": "string", "enum": ["Trimestre 1", "Trimestre 2", "Trimestre 3" ] },
+        "gradesSummary": { "type": "array" },
+        "generalAverage": { "type": "number" },
+        "remark": { "type": "string" },
+        "councilDecision": { "type": "string" },
+        "absencesCount": { "type": "number" },
+        "latenessesCount": { "type": "number" },
+        "isPublished": { "type": "boolean" },
+        "signatureParent": { "type": "string" },
+        "signatureParentDate": { "type": "string" },
+        "publishedBy": { "type": "string" },
+        "publishedByName": { "type": "string" },
+        "publishedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "studentName", "period", "generalAverage", "isPublished"]
+    },
+    "rh_staff": {
+      "title": "Staff RH Profiles",
+      "description": "Information dossiers for administrative and academic staff.",
+      "type": "object",
+      "properties": {
+        "nom": { "type": "string" },
+        "prenom": { "type": "string" },
+        "sexe": { "type": "string" },
+        "matricule": { "type": "string" },
+        "poste": { "type": "string" },
+        "departement": { "type": "string" },
+        "typeContrat": { "type": "string" },
+        "dateEntree": { "type": "string" },
+        "statut": { "type": "string" },
+        "tarifHoraire": { "type": "number" },
+        "heuresEffectuees": { "type": "number" },
+        "etablissement": { "type": "string" }
+      }
+    },
+    "rh_advances": {
+      "title": "Salary Advances",
+      "description": "Advance requests and payments for the staff.",
+      "type": "object",
+      "properties": {
+        "staffId": { "type": "string" },
+        "staffName": { "type": "string" },
+        "montant": { "type": "number" },
+        "motif": { "type": "string" },
+        "status": { "type": "string" },
+        "date": { "type": "string" }
+      }
+    },
+    "rh_bulletin_config": {
+      "title": "School Bulletin Styling Config",
+      "description": "Official layout settings, colors, signatures and logos for custom report cards.",
+      "type": "object",
+      "properties": {
+        "nomEtablissement": { "type": "string" },
+        "devise": { "type": "string" },
+        "couleurPrimaire": { "type": "string" },
+        "couleurSecondaire": { "type": "string" },
+        "signatureDirecteur": { "type": "string" },
+        "signatureResponsable": { "type": "string" },
+        "format": { "type": "string" }
+      }
+    },
+    "finance_settings": {
+      "title": "Finance Settings",
+      "description": "Financial configuration and starting balances for establishments",
+      "type": "object",
+      "properties": {
+        "establishmentId": { "type": "string" },
+        "initialCash": { "type": "number" },
+        "initialBank": { "type": "number" },
+        "initialMomo": { "type": "number" },
+        "defaultRequiredFee": { "type": "number" },
+        "lastUpdated": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["establishmentId"]
+    },
+    "rh_generated_documents": {
+      "title": "RH Generated Documents",
+      "description": "Archived official and AI-generated documents for school staff.",
+      "type": "object",
+      "properties": {
+        "etablissement": { "type": "string" },
+        "staffId": { "type": "string" },
+        "staffName": { "type": "string" },
+        "typeDoc": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "introduction": { "type": "string" },
+        "articles": { "type": "array" },
+        "signatures": { "type": "object" },
+        "gabonLawStamp": { "type": "string" },
+        "datePlace": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["etablissement", "staffId", "typeDoc", "title"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "users", "description": "User documents" },
+    "/attendance/{attId}": { "schema": "attendance", "description": "Daily summaries" },
+    "/attendance_logs/{logId}": { "schema": "attendance_logs", "description": "Scans logs" },
+    "/clubs/{clubId}": { "schema": "clubs", "description": "Club documents" },
+    "/grades/{gradeId}": { "schema": "grades", "description": "Grade entries" },
+    "/sanctions/{sanctionId}": { "schema": "sanctions", "description": "Discipline entries" },
+    "/homework/{homeworkId}": { "schema": "homework", "description": "Homework assignments" },
+    "/preparations/{prepId}": { "schema": "preparations", "description": "Lesson plans and courses" },
+    "/notifications/{notifId}": { "schema": "notifications", "description": "User notifications" },
+    "/user_sessions/{sessionId}": { "schema": "user_sessions", "description": "Real-time user sessions" },
+    "/teacher_planning/{planId}": { "schema": "teacher_planning", "description": "Daily planning for teachers" },
+    "/strategic_optimizations/{optId}": { "schema": "strategic_optimizations", "description": "AI-guided optimizations list and structural logs." },
+    "/role_responsibilities/{respId}": { "schema": "role_responsibilities", "description": "Custom roles access and missions." },
+    "/maternelle_siestas/{siestaId}": { "schema": "maternelle_siestas", "description": "Real-time sleep logs for toddlers." },
+    "/maternelle_transmissions/{transmissionId}": { "schema": "maternelle_transmissions", "description": "Liaison notes and daily transmissions for nursery parents." },
+    "/resp_reading_progress/{rpId}": { "schema": "resp_reading_progress", "description": "Reading progress tracking for primary challenge." },
+    "/resp_field_trips/{ftId}": { "schema": "resp_field_trips", "description": "Authorized field trips records." },
+    "/resp_college_detentions/{detId}": { "schema": "resp_college_detentions", "description": "College detentions log." },
+    "/resp_brevet_chapters/{chId}": { "schema": "resp_brevet_chapters", "description": "Brevet preparation chapters." },
+    "/resp_accounting_flows/{flowId}": { "schema": "resp_accounting_flows", "description": "Comptabilité auxiliary real-time ledger entries." },
+    "/resp_remedial_groups/{remId}": { "schema": "resp_remedial_groups", "description": "Pédagogique remedial classes roster." },
+    "/resp_syllabus_rates/{rateId}": { "schema": "resp_syllabus_rates", "description": "Syllabus rates tracking." },
+    "/resp_late_slips/{slipId}": { "schema": "resp_late_slips", "description": "Discipline retard tickets." },
+    "/resp_visitors_log/{visitorId}": { "schema": "resp_visitors_log", "description": "Accès registry." },
+    "/resp_locker_keys/{keyId}": { "schema": "resp_locker_keys", "description": "Key loans." },
+    "/resp_clean_zones/{zoneId}": { "schema": "resp_clean_zones", "description": "Salubrité checklist." },
+    "/resp_cleaning_supplies/{supId}": { "schema": "resp_cleaning_supplies", "description": "Cleaning supply stock status." },
+    "/resp_dossiers/{dosId}": { "schema": "resp_dossiers", "description": "Candidate files." },
+    "/resp_secretaire_tasks/{taskId}": { "schema": "resp_secretaire_tasks", "description": "Secretary General task list with Directorate options." },
+    "/resp_phone_calls/{callId}": { "schema": "resp_phone_calls", "description": "Phone call receipts." },
+    "/resp_it_loans/{loanId}": { "schema": "resp_it_loans", "description": "Tablet cart loans." },
+    "/resp_it_tickets/{ticketId}": { "schema": "resp_it_tickets", "description": "IT defect tickets." },
+    "/access_requests/{reqId}": { "schema": "access_requests", "description": "Access requests and public registrations pending admin validation." },
+    "/bulletin_rights/{userId}": { "schema": "bulletin_rights", "description": "Delegated bulletin publishing permissions mapping." },
+    "/bulletins/{bulletinId}": { "schema": "bulletins", "description": "Structured quarterly report cards." },
+    "/rh_staff/{id}": { "schema": "rh_staff", "description": "Staff RH Profiles" },
+    "/rh_advances/{id}": { "schema": "rh_advances", "description": "Salary Advances" },
+    "/rh_bulletin_config/{id}": { "schema": "rh_bulletin_config", "description": "School Bulletin Config" },
+    "/finance_settings/{settingId}": { "schema": "finance_settings", "description": "Starting/initial balances and financial parameters per establishment" },
+    "/rh_generated_documents/{id}": { "schema": "rh_generated_documents", "description": "Archived official and AI-generated documents for staff" }
+  }
+}

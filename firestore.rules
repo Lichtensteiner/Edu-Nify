@@ -1,0 +1,526 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function hasUserData() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email == "martinienmvezogo@gmail.com") ||
+        (hasUserData() && getUserData().get('role', '') == 'admin') ||
+        (hasUserData() && getUserData().get('role', '') == 'personnel administratif') ||
+        (hasUserData() && getUserData().get('role', '') == 'comptable') ||
+        (hasUserData() && getUserData().get('role', '') == 'gestionnaire_comptable')
+      );
+    }
+    
+    function isVerified() {
+      return isAuthenticated();
+    }
+
+    function isTeacher() {
+      return hasUserData() && getUserData().get('role', '') == 'enseignant';
+    }
+    
+    function isStaff() {
+      return hasUserData() && getUserData().get('role', '') == 'personnel administratif';
+    }
+    
+    function isParent() {
+      return hasUserData() && getUserData().get('role', '') == 'parent';
+    }
+
+    function isChildOf(childId) {
+      return isParent() && ('children_ids' in getUserData()) && (childId in getUserData().children_ids);
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function canManageBySubject(subject) {
+      return isAdmin() || (
+        isTeacher() && (
+          (getUserData().get('matiere', '') == subject) || 
+          (getUserData().get('matieres', []).hasAny([subject]))
+        )
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function hasResponsibility(respId) {
+      return isAuthenticated() && (
+        isAdmin() || 
+        (hasUserData() && getUserData().get('responsibilities', []).hasAny([respId]))
+      );
+    }
+
+    // ===============================================================
+    // Collections
+    // ===============================================================
+
+    match /{document=**} {
+      allow read, write: if request.auth == null;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin() || isTeacher() || isStaff() || isChildOf(userId);
+      allow create: if isAuthenticated() && request.auth.uid == userId && (incoming().get('role', '') != 'admin' || request.auth.token.email == "martinienmvezogo@gmail.com");
+      allow update: if isAdmin() || (isOwner(userId) && incoming().get('role', '') == existing().get('role', ''));
+      allow delete: if isAdmin();
+    }
+
+    // Classes Collection
+    match /classes/{classId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Etablissements Collection
+    match /etablissements/{etablissementId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Connections Collection
+    match /connections/{connectionId} {
+      allow read: if isAuthenticated();
+      allow create: if true;
+    }
+
+    // Audit Logs Collection
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+    }
+
+    // Tasks Collection
+    match /tasks/{taskId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Timetables and Assignments
+    match /timetables/{timetableId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /timetable_assignments/{assignmentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Wellbeing Logs
+    match /wellbeing_logs/{logId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Finance Collections
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasResponsibility('gestionnaire_comptable');
+    }
+
+    match /accounting_plan/{planId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasResponsibility('gestionnaire_comptable');
+    }
+
+    match /accounting_entries/{entryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasResponsibility('gestionnaire_comptable');
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasResponsibility('gestionnaire_comptable');
+    }
+
+    match /canteen_transactions/{transactionId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasResponsibility('gestionnaire_comptable');
+    }
+
+    match /caisse_sessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasResponsibility('gestionnaire_comptable');
+    }
+
+    // Attendance Collection
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || isStaff() || isOwner(resource.data.user_id) || isChildOf(resource.data.user_id));
+      allow create: if isVerified(); // Students can clock in
+      allow update, delete: if isAdmin(); // ONLY Admin can modify/delete summary records
+    }
+
+    // Attendance Logs Collection (Detailed scans)
+    match /attendance_logs/{logId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || isStaff() || isOwner(resource.data.user_id) || isChildOf(resource.data.user_id));
+      allow create: if isVerified(); // Scanners can create logs
+      allow update, delete: if isAdmin(); // ONLY Admin can modify/delete logs
+    }
+
+    // Grades Collection
+    match /grades/{gradeId} {
+      function isValidGrade(data) {
+        return data.keys().hasAll(['studentId', 'subject', 'score', 'maxScore', 'title', 'teacherId', 'classId', 'type']) &&
+               data.studentId is string && data.studentId.size() <= 128 &&
+               data.subject is string && data.subject.size() <= 100 &&
+               data.score is number && 
+               data.maxScore is number &&
+               data.teacherId == request.auth.uid &&
+               data.classId is string;
+      }
+
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || isOwner(resource.data.studentId) || isChildOf(resource.data.studentId));
+      
+      allow create: if isVerified() && 
+                    isValidId(gradeId) && 
+                    isValidGrade(incoming()) && 
+                    canManageBySubject(incoming().subject);
+      
+      allow update: if isVerified() && 
+                    isValidId(gradeId) &&
+                    isValidGrade(incoming()) && 
+                    canManageBySubject(existing().subject) && (
+        isAdmin() || (
+          incoming().diff(existing()).affectedKeys().hasOnly(['score', 'maxScore', 'coefficient', 'title', 'comment', 'type', 'updatedAt']) &&
+          incoming().subject == existing().subject &&
+          incoming().studentId == existing().studentId &&
+          incoming().teacherId == existing().teacherId &&
+          incoming().teacherId == request.auth.uid
+        )
+      );
+      
+      allow delete: if isVerified() && 
+                    isValidId(gradeId) &&
+                    canManageBySubject(existing().subject) && 
+                    (isAdmin() || existing().teacherId == request.auth.uid);
+    }
+
+    // Subjects Collection
+    match /subjects/{subjectId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Sanctions Collection
+    match /sanctions/{sanctionId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || isOwner(resource.data.studentId) || isChildOf(resource.data.studentId));
+      allow write: if isAdmin() || isTeacher();
+    }
+
+    // Feedback Collection
+    match /feedback/{feedbackId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || isTeacher() || isStaff();
+      allow update, delete: if isAdmin() || isStaff();
+    }
+
+    // Houses Collection
+    match /houses/{houseId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Events Collection
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isTeacher() || isStaff();
+    }
+
+    // Posts Collection (NewsFeed)
+    match /posts/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.authorId);
+      
+      // Comments subcollection
+      match /comments/{commentId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.authorId);
+      }
+    }
+
+    // Notifications Collection
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.user_id;
+      allow create: if isAuthenticated(); // Users can notify others
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.user_id;
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.user_id;
+    }
+
+    // Announcements Collection
+    match /announcements/{announcementId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || isTeacher() || isStaff();
+      allow update, delete: if isAdmin() || isStaff();
+    }
+
+    // Conversations Collection
+    match /conversations/{conversationId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow delete: if isAuthenticated() && (request.auth.uid in resource.data.participants || isAdmin());
+    }
+
+    // Messages Collection (subcollection of conversations)
+    match /conversations/{conversationId}/messages/{messageId} {
+      allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+      allow create: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+      allow update: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+    }
+
+    // Preparations Collection (Courses)
+    match /preparations/{prepId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && canManageBySubject(incoming().subject);
+      allow update, delete: if isAdmin() || (request.auth.uid == existing().authorId && canManageBySubject(existing().subject));
+    }
+
+    // Resources Collection
+    match /resources/{resourceId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && canManageBySubject(incoming().subject);
+      allow update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == existing().teacher_id && canManageBySubject(existing().subject));
+    }
+
+    // Clubs Collection
+    match /clubs/{clubId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || 
+        (isAuthenticated() && request.auth.uid == resource.data.leaderId) || 
+        (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']));
+      allow delete: if isAdmin();
+    }
+
+    // Behavior Points Collection
+    match /behavior_points/{pointId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || isStaff() || isOwner(resource.data.student_id) || isChildOf(resource.data.student_id));
+      allow create: if isAdmin() || isTeacher();
+      allow update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.teacher_id);
+    }
+
+    // Homework Collection
+    match /homework/{homeworkId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && canManageBySubject(incoming().subject);
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (isTeacher() && request.auth.uid == existing().teacherId && canManageBySubject(existing().subject)) ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['completedBy']))
+      );
+      allow delete: if isAdmin() || (isTeacher() && request.auth.uid == existing().teacherId && canManageBySubject(existing().subject));
+    }
+
+    // User Sessions Collection
+    match /user_sessions/{sessionId} {
+      allow create: if isAuthenticated() && incoming().userId == request.auth.uid;
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    // Teacher Planning Collection
+    match /teacher_planning/{planId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || isStaff());
+      allow create: if isTeacher() && incoming().teacherId == request.auth.uid;
+      allow update, delete: if isTeacher() && (existing().teacherId == request.auth.uid);
+    }
+
+    // Strategic Optimizations Collection
+    match /strategic_optimizations/{optId} {
+      allow read, write: if isAuthenticated() && (isAdmin() || isTeacher());
+    }
+
+    // Role Responsibilities & Page Access Configuration Collection
+    match /role_responsibilities/{respId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || isStaff());
+      allow write: if isAuthenticated() && (isAdmin() || isStaff());
+    }
+
+    // PWA Installations Collection
+    match /pwa_installations/{installId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (request.auth.uid == installId || isAdmin());
+    }
+
+    // Maternelle siestas (sleep records)
+    match /maternelle_siestas/{siestaId} {
+      allow read, write: if hasResponsibility('responsable_maternelle');
+    }
+
+    // Maternelle transmissions (news/reports feed)
+    match /maternelle_transmissions/{transmissionId} {
+      allow read, write: if hasResponsibility('responsable_maternelle');
+    }
+
+    // Reading progress tracking (Primary challenge)
+    match /resp_reading_progress/{rpId} {
+      allow read, write: if hasResponsibility('responsable_primaire');
+    }
+
+    // Authorized field trips
+    match /resp_field_trips/{ftId} {
+      allow read, write: if hasResponsibility('responsable_primaire');
+    }
+
+    // College detentions
+    match /resp_college_detentions/{detId} {
+      allow read, write: if hasResponsibility('responsable_college');
+    }
+
+    // Brevet preparation chapters
+    match /resp_brevet_chapters/{chId} {
+      allow read, write: if hasResponsibility('responsable_college');
+    }
+
+    // Comptabilité auxiliary ledger flows
+    match /resp_accounting_flows/{flowId} {
+      allow read, write: if hasResponsibility('gestionnaire_comptable');
+    }
+
+    // Pédagogique remedial classes roster
+    match /resp_remedial_groups/{remId} {
+      allow read, write: if hasResponsibility('responsable_pedagogique');
+    }
+
+    // Syllabus rates tracking
+    match /resp_syllabus_rates/{rateId} {
+      allow read, write: if hasResponsibility('responsable_pedagogique');
+    }
+
+    // Discipline retard tickets
+    match /resp_late_slips/{slipId} {
+      allow read, write: if hasResponsibility('surveillant_general');
+    }
+
+    // Accès gates registry
+    match /resp_visitors_log/{visitorId} {
+      allow read, write: if hasResponsibility('surveillant_adjoint');
+    }
+
+    // Locker key loans
+    match /resp_locker_keys/{keyId} {
+      allow read, write: if hasResponsibility('surveillant_adjoint');
+    }
+
+    // Salubrité checklist
+    match /resp_clean_zones/{zoneId} {
+      allow read, write: if hasResponsibility('dame_menage');
+    }
+
+    // Cleaning supply stock status
+    match /resp_cleaning_supplies/{supId} {
+      allow read, write: if hasResponsibility('dame_menage');
+    }
+
+    // Candidate dossiers
+    match /resp_dossiers/{dosId} {
+      allow read, write: if hasResponsibility('secretaire_generale')
+        || hasResponsibility('responsable_pedagogique')
+        || hasResponsibility('responsable_maternelle')
+        || hasResponsibility('responsable_college')
+        || hasResponsibility('responsable_primaire')
+        || hasResponsibility('responsable_it');
+    }
+
+    // Secretary General Tasks
+    match /resp_secretaire_tasks/{taskId} {
+      allow read, write: if hasResponsibility('secretaire_generale')
+        || hasResponsibility('responsable_pedagogique')
+        || hasResponsibility('responsable_maternelle')
+        || hasResponsibility('responsable_college')
+        || hasResponsibility('responsable_primaire')
+        || hasResponsibility('responsable_it');
+    }
+
+    // Phone calls logs
+    match /resp_phone_calls/{callId} {
+      allow read, write: if hasResponsibility('secretaire_adjointe');
+    }
+
+    // Tablet cart loans
+    match /resp_it_loans/{loanId} {
+      allow read, write: if hasResponsibility('responsable_it');
+    }
+
+    // IT defect tickets
+    match /resp_it_tickets/{ticketId} {
+      allow read, write: if hasResponsibility('responsable_it');
+    }
+
+    // Access Requests (Public Sign-up and Administrator verification)
+    match /access_requests/{reqId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Bulletin Publishing Rights Delegation mapping
+    match /bulletin_rights/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Student Bulletins
+    match /bulletins/{bulletinId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.studentId == request.auth.uid ||
+        isChildOf(resource.data.studentId) ||
+        exists(/databases/$(database)/documents/bulletin_rights/$(request.auth.uid))
+      );
+      allow create, update, delete: if isAuthenticated() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/bulletin_rights/$(request.auth.uid)) && get(/databases/$(database)/documents/bulletin_rights/$(request.auth.uid)).data.canPublish == true)
+      );
+    }
+
+    // Advanced RH collections
+    match /rh_staff/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /rh_advances/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /rh_bulletin_config/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    match /rh_generated_documents/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /finance_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasResponsibility('gestionnaire_comptable');
+    }
+  }
+}
