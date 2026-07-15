@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useEstablishment } from '../contexts/EstablishmentContext';
 import { QRCodeSVG } from 'qrcode.react';
-import { UserCircle, GraduationCap, Hash, Mail, Castle, Phone, MapPin, Globe, Shield, Calendar, Users } from 'lucide-react';
-import { doc, getDoc } from 'firebase/firestore';
+import { UserCircle, GraduationCap, Hash, Mail, Castle, Phone, MapPin, Globe, Shield, Calendar, Users, Download, Award, AlertTriangle, Check, BookOpen, Plus, Sparkles, LogOut } from 'lucide-react';
+import { doc, getDoc, collection, query, where, getDocs, updateDoc, arrayUnion, arrayRemove, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { useNotification } from '../contexts/NotificationContext';
+import { jsPDF } from 'jspdf';
+import QRCode from 'qrcode';
 
 interface SystemHeaderInfo {
   pays: string;
@@ -123,7 +126,338 @@ export function CountryFlag({ code, className = "w-8 h-5" }: { code: string; cla
 export default function StudentCard() {
   const { currentUser } = useAuth();
   const { currentEstablishment } = useEstablishment();
+  const { notifySuccess, notifyError } = useNotification();
   const [house, setHouse] = useState<any>(null);
+  const [parentInfo, setParentInfo] = useState<any>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [allClubs, setAllClubs] = useState<any[]>([]);
+  const [joinedClubs, setJoinedClubs] = useState<any[]>([]);
+  const [loadingClubs, setLoadingClubs] = useState(true);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const unsubscribe = onSnapshot(collection(db, 'clubs'), (snapshot) => {
+      const clubsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setAllClubs(clubsData);
+      const userClubs = clubsData.filter((c: any) => c.members?.includes(currentUser.id));
+      setJoinedClubs(userClubs);
+      setLoadingClubs(false);
+    });
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  const handleJoinLeaveClub = async (club: any) => {
+    if (!currentUser) return;
+    
+    // Teachers cannot join/leave student clubs
+    if (currentUser.role === 'enseignant') {
+      notifyError("En tant qu'enseignant, vous devez être géré par un administrateur.");
+      return;
+    }
+
+    const isMember = club.members?.includes(currentUser.id);
+    const clubRef = doc(db, 'clubs', club.id);
+    
+    try {
+      if (isMember) {
+        await updateDoc(clubRef, {
+          members: arrayRemove(currentUser.id)
+        });
+        notifySuccess(`Vous avez quitté le club : ${club.name}`);
+      } else {
+        await updateDoc(clubRef, {
+          members: arrayUnion(currentUser.id)
+        });
+        notifySuccess(`Félicitations ! Vous avez rejoint le club : ${club.name}`);
+      }
+    } catch (error) {
+      console.error("Error joining/leaving club:", error);
+      notifyError("Une erreur est survenue lors de l'inscription au club.");
+    }
+  };
+
+  const hexToRgb = (hex: string): [number, number, number] => {
+    if (!hex) return [79, 70, 229]; // Indigo default
+    hex = hex.replace('#', '');
+    if (hex.length === 3) {
+      hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    }
+    const num = parseInt(hex, 16);
+    if (isNaN(num)) return [79, 70, 229];
+    return [
+      (num >> 16) & 255,
+      (num >> 8) & 255,
+      num & 255
+    ];
+  };
+
+  const getImageDataUrl = (url: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => {
+        // Fallback for CORS or missing image
+        reject(new Error('Image load failed'));
+      };
+      img.src = url;
+    });
+  };
+
+  const handleDownloadPDF = async () => {
+    setIsGeneratingPDF(true);
+    try {
+      let pName = parentInfo ? `${parentInfo.prenom || ''} ${parentInfo.nom || ''}`.trim() : (currentUser.parent_nom || currentUser.parentNom || currentUser.nom_parent || currentUser.parentName || currentUser.tuteur_nom || currentUser.tuteurNom || 'N/A');
+      let pPhone = parentInfo ? (parentInfo.contact || parentInfo.telephone || parentInfo.phone) : (currentUser.parent_phone || currentUser.telephone_parent || currentUser.parentPhone || currentUser.tuteurPhone || 'N/A');
+      let pEmail = parentInfo?.email || currentUser.parent_email || currentUser.parentEmail || 'N/A';
+
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: [85.6, 53.98]
+      });
+
+      // --- FRONT SIDE ---
+      const primaryColorRGB = hexToRgb(currentEstablishment?.primaryColor || '#4f46e5');
+      const secondaryColorRGB = hexToRgb(currentEstablishment?.secondaryColor || '#ea580c');
+
+      // Card Background with dual brand accents
+      doc.setFillColor(15, 23, 42); 
+      doc.rect(0, 0, 85.6, 53.98, 'F');
+      
+      doc.setFillColor(secondaryColorRGB[0], secondaryColorRGB[1], secondaryColorRGB[2]);
+      doc.triangle(38, 0, 85.6, 0, 85.6, 53.98, 'F');
+      
+      // Dynamic Tricolor bar based on active system
+      const isGabon = headerInfo.pays.includes("GABON");
+      const isFrance = headerInfo.pays.includes("FRAN");
+
+      if (isGabon) {
+        doc.setFillColor(76, 175, 80); doc.rect(0, 0, 28, 1.5, 'F'); // Green
+        doc.setFillColor(255, 235, 59); doc.rect(28, 0, 28, 1.5, 'F'); // Yellow
+        doc.setFillColor(33, 150, 243); doc.rect(56, 0, 29.6, 1.5, 'F'); // Blue
+      } else if (isFrance) {
+        doc.setFillColor(33, 150, 243); doc.rect(0, 0, 28, 1.5, 'F'); // Blue
+        doc.setFillColor(255, 255, 255); doc.rect(28, 0, 28, 1.5, 'F'); // White
+        doc.setFillColor(244, 67, 54); doc.rect(56, 0, 29.6, 1.5, 'F'); // Red
+      } else {
+        doc.setFillColor(primaryColorRGB[0], primaryColorRGB[1], primaryColorRGB[2]); 
+        doc.rect(0, 0, 85.6, 1.5, 'F');
+      }
+
+      // Draw Logo
+      const logoSize = 10;
+      const logoX = 5;
+      const logoY = 4;
+      try {
+        const logoUrl = currentEstablishment?.logo || '/logo.png';
+        const imgData = await getImageDataUrl(logoUrl);
+        doc.addImage(imgData, 'PNG', logoX, logoY, logoSize, logoSize);
+      } catch (e) {
+        const initials = currentEstablishment?.nom ? currentEstablishment.nom.substring(0, 3).toUpperCase() : 'EDU';
+        doc.setFillColor(primaryColorRGB[0], primaryColorRGB[1], primaryColorRGB[2]);
+        doc.roundedRect(logoX, logoY, logoSize, logoSize, 1.5, 1.5, 'F');
+        doc.setTextColor(255);
+        doc.setFontSize(logoSize * 0.38);
+        doc.setFont("helvetica", "bold");
+        doc.text(initials, logoX + logoSize/2, logoY + logoSize/2 + 0.5, { align: 'center', baseline: 'middle' });
+      }
+
+      // Flag
+      const flagX = 17, flagY = 3.8, flagW = 3.5, flagH = 2.2;
+      if (headerInfo.codePays === "GA") {
+        doc.setFillColor(76, 175, 80); doc.rect(flagX, flagY, flagW, flagH / 3, 'F');
+        doc.setFillColor(255, 235, 59); doc.rect(flagX, flagY + flagH / 3, flagW, flagH / 3, 'F');
+        doc.setFillColor(33, 150, 243); doc.rect(flagX, flagY + (2 * flagH) / 3, flagW, flagH / 3, 'F');
+      } else if (headerInfo.codePays === "FR") {
+        doc.setFillColor(33, 150, 243); doc.rect(flagX, flagY, flagW / 3, flagH, 'F');
+        doc.setFillColor(255, 255, 255); doc.rect(flagX + flagW / 3, flagY, flagW / 3, flagH, 'F');
+        doc.setFillColor(244, 67, 54); doc.rect(flagX + (2 * flagW) / 3, flagY, flagW / 3, flagH, 'F');
+      }
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(4.5);
+      doc.setFont("helvetica", "bold");
+      doc.text(headerInfo.pays, 21.5, 5.5);
+
+      doc.setFontSize(6.5);
+      doc.text(headerInfo.nomEtablissement.toUpperCase(), 17, 10);
+      
+      doc.setFontSize(3.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(203, 213, 225);
+      doc.text(`${headerInfo.ministere} | ${headerInfo.direction}`, 17, 14);
+
+      // Photo Section
+      doc.setDrawColor(primaryColorRGB[0], primaryColorRGB[1], primaryColorRGB[2]);
+      doc.setLineWidth(0.3);
+      const photoX = 5;
+      const photoY = 20;
+      doc.roundedRect(photoX, photoY, 24, 28, 1, 1, 'D');
+
+      if (currentUser.photo) {
+        try {
+          const studentPhotoData = await getImageDataUrl(currentUser.photo);
+          doc.addImage(studentPhotoData, 'JPEG', photoX + 0.5, photoY + 0.5, 23, 27);
+        } catch (e) {
+          doc.setFillColor(51, 65, 85);
+          doc.roundedRect(photoX + 0.5, photoY + 0.5, 23, 27, 0.5, 0.5, 'F');
+          doc.setFontSize(5);
+          doc.setTextColor(200);
+          doc.text("PHOTO NON DISPO", photoX + 12, photoY + 14, { align: 'center' });
+        }
+      } else {
+        doc.setFillColor(51, 65, 85);
+        doc.roundedRect(photoX + 0.5, photoY + 0.5, 23, 27, 0.5, 0.5, 'F');
+        doc.setFontSize(5);
+        doc.setTextColor(200);
+        doc.text("PAS DE PHOTO", photoX + 12, photoY + 14, { align: 'center' });
+      }
+
+      // Details Section
+      const detailsX = 34;
+      doc.setFontSize(5);
+      doc.setTextColor(148, 163, 184);
+      doc.setFont("helvetica", "bold");
+      doc.text("NOM COMPLET", detailsX, 22);
+      doc.text("ID ELEVE / MATRICULE", detailsX, 33);
+      doc.text("CLASSE / PROGRAMME", detailsX, 40);
+      doc.text("MAISON ACADEMIQUE", detailsX, 47);
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.text(`${currentUser.nom.toUpperCase()} ${currentUser.prenom}`, detailsX, 26);
+      
+      doc.setFontSize(6);
+      doc.setFont("helvetica", "normal");
+      doc.text(currentUser.matricule || currentUser.id.substring(0, 10), detailsX, 36);
+      doc.text(currentUser.classe?.toUpperCase() || "N/A", detailsX, 43);
+      doc.text(house?.nom_maison?.toUpperCase() || "N/A", detailsX, 50);
+
+      // QR Code
+      const qrDataStr = `STUDENT_VERIF:${currentUser.id}`;
+      const qrDataUrl = await QRCode.toDataURL(qrDataStr, { 
+         margin: 1,
+         color: { dark: '#1e293b', light: '#ffffff' }
+      });
+      
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(68, 18, 13, 13, 1, 1, 'F');
+      doc.addImage(qrDataUrl, 'PNG', 68.5, 18.5, 12, 12);
+
+      // Academic Year Ribbon
+      doc.setFillColor(primaryColorRGB[0], primaryColorRGB[1], primaryColorRGB[2]);
+      doc.roundedRect(63, 51.5, 20, 2.48, 0.5, 0.5, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(4);
+      doc.setFont("helvetica", "bold");
+      doc.text(currentEstablishment?.activeSchoolYear || "2025-2026", 73, 53);
+
+      // --- BACK SIDE ---
+      doc.addPage([85.6, 53.98], 'landscape');
+
+      // Back side background (dark Slate)
+      doc.setFillColor(15, 23, 42); 
+      doc.rect(0, 0, 85.6, 53.98, 'F');
+
+      // Tricolor bar
+      if (isGabon) {
+        doc.setFillColor(76, 175, 80); doc.rect(0, 0, 28, 1.5, 'F'); // Green
+        doc.setFillColor(255, 235, 59); doc.rect(28, 0, 28, 1.5, 'F'); // Yellow
+        doc.setFillColor(33, 150, 243); doc.rect(56, 0, 29.6, 1.5, 'F'); // Blue
+      } else if (isFrance) {
+        doc.setFillColor(33, 150, 243); doc.rect(0, 0, 28, 1.5, 'F'); // Blue
+        doc.setFillColor(255, 255, 255); doc.rect(28, 0, 28, 1.5, 'F'); // White
+        doc.setFillColor(244, 67, 54); doc.rect(56, 0, 29.6, 1.5, 'F'); // Red
+      } else {
+        doc.setFillColor(primaryColorRGB[0], primaryColorRGB[1], primaryColorRGB[2]); 
+        doc.rect(0, 0, 85.6, 1.5, 'F');
+      }
+
+      // Title on Back Side
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(6);
+      doc.setFont("helvetica", "bold");
+      doc.text("COORDONNÉES, FILIATION & CLUBS", 5, 8);
+
+      // Line separator
+      doc.setDrawColor(primaryColorRGB[0], primaryColorRGB[1], primaryColorRGB[2]);
+      doc.setLineWidth(0.2);
+      doc.line(5, 10, 80.6, 10);
+
+      // Parent Info
+      doc.setFontSize(4.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text("NOM DU PARENT / TUTEUR :", 5, 14);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(5.5);
+      doc.setFont("helvetica", "bold");
+      doc.text(pName.toUpperCase(), 5, 18);
+
+      doc.setFontSize(4.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text("CONTACT :", 5, 24);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(5.5);
+      doc.setFont("helvetica", "normal");
+      doc.text(pPhone, 5, 28);
+
+      doc.setFontSize(4.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text("EMAIL :", 5, 34);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(5.5);
+      doc.text(pEmail, 5, 38);
+
+      // Student Registered Clubs on back side
+      doc.setFontSize(4.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text("CLUBS REJOINTS :", 45, 14);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(4.5);
+      if (joinedClubs && joinedClubs.length > 0) {
+        joinedClubs.slice(0, 2).forEach((c, index) => {
+          doc.text(`• ${c.name}`, 45, 18 + (index * 3), { maxWidth: 35 });
+        });
+      } else {
+        doc.setFont("helvetica", "italic");
+        doc.text("Aucun club rejoint", 45, 18);
+        doc.setFont("helvetica", "normal");
+      }
+
+      // Student Residence Address on back side
+      doc.setFontSize(4.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text("ADRESSE DE L'ÉLÈVE :", 45, 26);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(5.5);
+      const addr = currentUser.adresse || currentUser.address || 'Non spécifiée';
+      doc.text(addr, 45, 30, { maxWidth: 35 });
+
+      // Card Policy / Instructions (Mini print)
+      doc.setFontSize(3.5);
+      doc.setTextColor(148, 163, 184);
+      doc.setFont("helvetica", "normal");
+      doc.text("Cette carte est strictement personnelle et demeure la propriété de l'établissement.", 5, 45);
+      doc.text("En cas de perte, veuillez contacter immédiatement l'administration.", 5, 48);
+
+      doc.save(`Carte_Scolaire_${currentUser.prenom}_${currentUser.nom}.pdf`);
+    } catch (err) {
+      console.error("Error generating PDF card:", err);
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
 
   useEffect(() => {
     const fetchHouse = async () => {
@@ -139,6 +473,28 @@ export default function StudentCard() {
       }
     };
     fetchHouse();
+  }, [currentUser]);
+
+  useEffect(() => {
+    const fetchParent = async () => {
+      if (currentUser?.id) {
+        try {
+          const q = query(
+            collection(db, 'users'),
+            where('role', '==', 'parent'),
+            where('children_ids', 'array-contains', currentUser.id)
+          );
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const parentDoc = querySnapshot.docs[0];
+            setParentInfo({ id: parentDoc.id, ...parentDoc.data() });
+          }
+        } catch (error) {
+          console.error("Error fetching parent:", error);
+        }
+      }
+    };
+    fetchParent();
   }, [currentUser]);
 
   if (!currentUser) return null;
@@ -158,8 +514,28 @@ export default function StudentCard() {
 
   return (
     <div className="max-w-xl mx-auto space-y-6 animate-in fade-in duration-300">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Carte Biométrique Scolaire</h1>
+        <button
+          onClick={handleDownloadPDF}
+          disabled={isGeneratingPDF}
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-bold rounded-2xl transition duration-200 shadow-md hover:shadow-lg active:scale-95 cursor-pointer text-xs"
+        >
+          {isGeneratingPDF ? (
+            <>
+              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>Génération du PDF...</span>
+            </>
+          ) : (
+            <>
+              <Download className="w-4 h-4" />
+              <span>Télécharger ma carte (PDF)</span>
+            </>
+          )}
+        </button>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] shadow-2xl overflow-hidden border border-gray-150 dark:border-gray-700 relative">
@@ -355,9 +731,11 @@ export default function StudentCard() {
                 <div className="w-7 h-7 rounded-full bg-white dark:bg-gray-850 flex items-center justify-center shadow-sm text-indigo-600 dark:text-indigo-400 shrink-0">
                   <MapPin size={14} />
                 </div>
-                <div className="min-w-0">
-                  <p className="text-[9px] text-gray-400 dark:text-gray-500 font-extrabold uppercase tracking-wider leading-none">Adresse de Résidence</p>
-                  <p className="font-extrabold text-xs mt-0.5 truncate">{currentUser.adresse || currentUser.address || 'Non spécifiée'}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[9px] text-gray-400 dark:text-gray-500 font-extrabold uppercase tracking-wider leading-none">Adresse</p>
+                  <p className="font-extrabold text-xs mt-1 break-all bg-gray-50 dark:bg-gray-900/30 px-2.5 py-1.5 rounded-xl border border-gray-150/40 dark:border-gray-850">
+                    {currentUser.adresse || currentUser.address || 'Non spécifiée'}
+                  </p>
                 </div>
               </div>
 
@@ -365,10 +743,10 @@ export default function StudentCard() {
                 <div className="w-7 h-7 rounded-full bg-white dark:bg-gray-850 flex items-center justify-center shadow-sm text-indigo-600 dark:text-indigo-400 shrink-0">
                   <Users size={14} />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-[9px] text-gray-400 dark:text-gray-500 font-extrabold uppercase tracking-wider leading-none">Parent / Tuteur</p>
-                  <p className="font-extrabold text-xs mt-0.5 truncate">
-                    {currentUser.parent_nom || currentUser.parentNom || currentUser.nom_parent || currentUser.parentName || currentUser.tuteur_nom || currentUser.tuteurNom || 'Non renseigné'}
+                  <p className="font-extrabold text-xs mt-1 truncate">
+                    {parentInfo ? `${parentInfo.prenom || ''} ${parentInfo.nom || ''}`.trim() : (currentUser.parent_nom || currentUser.parentNom || currentUser.nom_parent || currentUser.parentName || currentUser.tuteur_nom || currentUser.tuteurNom || 'Non renseigné')}
                   </p>
                 </div>
               </div>
@@ -377,13 +755,27 @@ export default function StudentCard() {
                 <div className="w-7 h-7 rounded-full bg-white dark:bg-gray-850 flex items-center justify-center shadow-sm text-indigo-600 dark:text-indigo-400 shrink-0">
                   <Phone size={14} />
                 </div>
-                <div className="min-w-0">
-                  <p className="text-[9px] text-gray-400 dark:text-gray-500 font-extrabold uppercase tracking-wider leading-none">Téléphone du Tuteur</p>
-                  <p className="font-extrabold text-xs mt-0.5 font-mono truncate">
-                    {currentUser.parent_phone || currentUser.telephone_parent || currentUser.parentPhone || currentUser.tuteurPhone || 'Non renseigné'}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[9px] text-gray-400 dark:text-gray-500 font-extrabold uppercase tracking-wider leading-none">Contact du Tuteur</p>
+                  <p className="font-extrabold text-xs mt-1 font-mono break-all bg-gray-50 dark:bg-gray-900/30 px-2.5 py-1.5 rounded-xl border border-gray-150/40 dark:border-gray-850">
+                    {parentInfo ? (parentInfo.contact || parentInfo.telephone || parentInfo.phone || 'Non renseigné') : (currentUser.parent_phone || currentUser.telephone_parent || currentUser.parentPhone || currentUser.tuteurPhone || 'Non renseigné')}
                   </p>
                 </div>
               </div>
+
+              {(parentInfo?.email || currentUser.parent_email || currentUser.parentEmail) && (
+                <div className="flex items-center gap-2.5 text-gray-750 dark:text-gray-300">
+                  <div className="w-7 h-7 rounded-full bg-white dark:bg-gray-850 flex items-center justify-center shadow-sm text-indigo-600 dark:text-indigo-400 shrink-0">
+                    <Mail size={14} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9px] text-gray-400 dark:text-gray-500 font-extrabold uppercase tracking-wider leading-none">Email du Tuteur</p>
+                    <p className="font-extrabold text-xs mt-1 truncate text-indigo-600 dark:text-indigo-400 bg-gray-50 dark:bg-gray-900/30 px-2.5 py-1.5 rounded-xl border border-gray-150/40 dark:border-gray-850">
+                      {parentInfo ? (parentInfo.email || 'Non renseigné') : (currentUser.parent_email || currentUser.parentEmail || 'Non renseigné')}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {currentUser.matricule && (
                 <div className="flex items-center gap-2.5 text-gray-750 dark:text-gray-300">
@@ -453,6 +845,126 @@ export default function StudentCard() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* SECTION DES CLUBS SCOLAIRES OBLIGATOIRES (MINIMUM 2) */}
+      <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] shadow-xl p-8 border border-gray-150/40 dark:border-gray-700 space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-gray-100 dark:border-gray-700">
+          <div>
+            <h3 className="text-lg font-black text-gray-950 dark:text-white flex items-center gap-2">
+              <Award className="text-indigo-600 dark:text-indigo-400" />
+              Clubs Académiques Obligatoires
+            </h3>
+            <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">Chaque élève doit obligatoirement faire partie d'au moins 2 clubs.</p>
+          </div>
+          
+          {/* Status badge */}
+          {joinedClubs.length >= 2 ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-55 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider rounded-full border border-emerald-500/20 shadow-sm shrink-0">
+              <Check size={12} className="stroke-[3]" />
+              Conforme ({joinedClubs.length}/2)
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-wider rounded-full border border-amber-500/20 shadow-sm shrink-0 animate-pulse">
+              <AlertTriangle size={12} className="stroke-[3]" />
+              Incomplet ({joinedClubs.length}/2)
+            </span>
+          )}
+        </div>
+
+        {/* Warning Alert if < 2 clubs */}
+        {joinedClubs.length < 2 && (
+          <div className="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/40 dark:border-amber-800/30 rounded-2xl p-4 flex gap-3 text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <div className="text-xs space-y-1">
+              <p className="font-bold uppercase tracking-wider text-[10px]">Réglementation Académique</p>
+              <p className="font-medium">
+                Pour être en règle, vous devez rejoindre au moins <strong className="font-black underline">{2 - joinedClubs.length}</strong> club(s) supplémentaire(s) parmi la liste disponible ci-dessous.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* List of currently joined clubs */}
+        <div className="space-y-3">
+          <h4 className="text-[10px] text-gray-400 dark:text-gray-500 font-extrabold uppercase tracking-widest">
+            Mes Clubs Actuels ({joinedClubs.length})
+          </h4>
+          
+          {loadingClubs ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+            </div>
+          ) : joinedClubs.length === 0 ? (
+            <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2">Vous n'êtes membre d'aucun club pour le moment.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2.5">
+              {joinedClubs.map((club) => (
+                <div key={club.id} className="flex items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-900/20 rounded-2xl border border-gray-150/40 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-750 transition-all group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-inner font-bold text-sm shrink-0 uppercase">
+                      {club.name[0]}
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-black text-gray-950 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{club.name}</h5>
+                      <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-md">
+                        {club.category}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleJoinLeaveClub(club)}
+                    className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                    title="Quitter le club"
+                  >
+                    <LogOut size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Explore and join other clubs */}
+        <div className="space-y-3 pt-2">
+          <h4 className="text-[10px] text-gray-400 dark:text-gray-500 font-extrabold uppercase tracking-widest">
+            Clubs Disponibles à Rejoindre
+          </h4>
+          
+          {loadingClubs ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+            </div>
+          ) : allClubs.filter(c => !c.members?.includes(currentUser.id)).length === 0 ? (
+            <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2">Aucun autre club disponible pour le moment.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin">
+              {allClubs
+                .filter(c => !c.members?.includes(currentUser.id))
+                .map((club) => (
+                  <div key={club.id} className="p-3.5 bg-gray-50/50 dark:bg-gray-900/10 rounded-2xl border border-gray-150/20 dark:border-gray-850 flex items-start justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-900/20 transition-all">
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h5 className="text-xs font-black text-gray-950 dark:text-white capitalize truncate">{club.name}</h5>
+                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-md shrink-0">
+                          {club.category}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2">{club.description || "Pas de description."}</p>
+                      <p className="text-[9px] text-gray-400 dark:text-gray-500 font-medium">Responsable : <span className="font-bold text-gray-600 dark:text-gray-300">{club.leaderName}</span></p>
+                    </div>
+                    <button
+                      onClick={() => handleJoinLeaveClub(club)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-[10px] transition duration-150 shadow-sm shrink-0 cursor-pointer active:scale-95"
+                    >
+                      <Plus size={10} className="stroke-[3]" />
+                      Rejoindre
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

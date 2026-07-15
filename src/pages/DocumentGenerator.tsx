@@ -44,6 +44,16 @@ interface Student {
   houseName?: string;
   dateNaissance?: string;
   lieuNaissance?: string;
+  parent_nom?: string;
+  parentNom?: string;
+  nom_parent?: string;
+  parentName?: string;
+  tuteur_nom?: string;
+  tuteurNom?: string;
+  parent_phone?: string;
+  telephone_parent?: string;
+  parentPhone?: string;
+  tuteurPhone?: string;
 }
 
 interface SystemHeaderInfo {
@@ -504,6 +514,29 @@ Génère une réponse sous forme d'un objet JSON pur et valide (sans aucun blabl
     setGenerating(student.id + '_card');
     try {
       console.log("Generating card for:", student.nom);
+      
+      // Fetch parent info dynamically
+      let parentName = student.parent_nom || student.parentNom || student.nom_parent || student.parentName || student.tuteur_nom || student.tuteurNom || "N/A";
+      let parentPhone = student.parent_phone || student.telephone_parent || student.parentPhone || student.tuteurPhone || "N/A";
+      let parentEmail = "N/A";
+      
+      try {
+        const q = query(
+          collection(db, 'users'),
+          where('role', '==', 'parent'),
+          where('children_ids', 'array-contains', student.id)
+        );
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const pDoc = querySnapshot.docs[0].data();
+          parentName = `${pDoc.prenom || ''} ${pDoc.nom || ''}`.trim() || parentName;
+          parentPhone = pDoc.contact || pDoc.telephone || pDoc.phone || parentPhone;
+          parentEmail = pDoc.email || parentEmail;
+        }
+      } catch (e) {
+        console.warn("Could not fetch parent for PDF card", e);
+      }
+
       const doc = new jsPDF({
         orientation: 'landscape',
         unit: 'mm',
@@ -603,8 +636,8 @@ Génère une réponse sous forme d'un objet JSON pur et valide (sans aucun blabl
       // QR Code
       const qrData = `STUDENT_VERIF:${student.id}`;
       const qrDataUrl = await QRCode.toDataURL(qrData, { 
-        margin: 1,
-        color: { dark: '#1e293b', light: '#ffffff' }
+         margin: 1,
+         color: { dark: '#1e293b', light: '#ffffff' }
       });
       
       doc.setFillColor(255, 255, 255);
@@ -617,6 +650,69 @@ Génère une réponse sous forme d'un objet JSON pur et valide (sans aucun blabl
       doc.setFontSize(4.5);
       doc.setTextColor(255, 255, 255);
       doc.text(config.academicYear || "2026/2027", 75, 54, { align: 'center' });
+
+      // --- BACK SIDE ---
+      doc.addPage([85.6, 53.98], 'landscape');
+
+      // Back side background (dark Slate)
+      doc.setFillColor(15, 23, 42); 
+      doc.rect(0, 0, 85.6, 53.98, 'F');
+
+      // Decorative top tricolor / color bar
+      if (isGabon) {
+        doc.setFillColor(76, 175, 80); doc.rect(0, 0, 28, 1.5, 'F'); // Green
+        doc.setFillColor(255, 235, 59); doc.rect(28, 0, 28, 1.5, 'F'); // Yellow
+        doc.setFillColor(33, 150, 243); doc.rect(56, 0, 29.6, 1.5, 'F'); // Blue
+      } else if (isFrance) {
+        doc.setFillColor(33, 150, 243); doc.rect(0, 0, 28, 1.5, 'F'); // Blue
+        doc.setFillColor(255, 255, 255); doc.rect(28, 0, 28, 1.5, 'F'); // White
+        doc.setFillColor(244, 67, 54); doc.rect(56, 0, 29.6, 1.5, 'F'); // Red
+      } else {
+        doc.setFillColor(primaryColorRGB[0], primaryColorRGB[1], primaryColorRGB[2]); 
+        doc.rect(0, 0, 85.6, 1.5, 'F');
+      }
+
+      // Title on Back Side
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(6);
+      doc.setFont("helvetica", "bold");
+      doc.text("COORDONNÉES DU PARENT / TUTEUR", 5, 8);
+
+      // Line separator
+      doc.setDrawColor(primaryColorRGB[0], primaryColorRGB[1], primaryColorRGB[2]);
+      doc.setLineWidth(0.2);
+      doc.line(5, 10, 80.6, 10);
+
+      // Parent Info Labels & Values
+      doc.setFontSize(4.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text("NOM DU PARENT / TUTEUR :", 5, 14);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(5.5);
+      doc.setFont("helvetica", "bold");
+      doc.text(parentName.toUpperCase(), 5, 18);
+
+      doc.setFontSize(4.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text("CONTACT :", 5, 24);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(5.5);
+      doc.setFont("helvetica", "normal");
+      doc.text(parentPhone, 5, 28);
+
+      doc.setFontSize(4.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text("EMAIL :", 5, 34);
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(5.5);
+      doc.text(parentEmail, 5, 38);
+
+      // Card Policy / Instructions (Mini print)
+      doc.setFontSize(3.5);
+      doc.setTextColor(148, 163, 184);
+      doc.setFont("helvetica", "normal");
+      doc.text("Cette carte est strictement personnelle et demeure la propriété de l'établissement.", 5, 45);
+      doc.text("En cas de perte, veuillez contacter immédiatement l'administration.", 5, 48);
 
       doc.save(`Carte_${student.prenom}_${student.nom}.pdf`);
       console.log("Card saved successfully");

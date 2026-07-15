@@ -398,7 +398,7 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50">
+            <div className="absolute right-[-1.5rem] sm:right-0 mt-2 w-[calc(100vw-2rem)] xs:w-[350px] sm:w-96 max-w-[calc(100vw-2rem)] bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50">
               <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
                 <h3 className="font-semibold text-gray-900 dark:text-white">{t('notifications')}</h3>
                 {unreadCount > 0 && (
@@ -430,11 +430,11 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
                           }`}>
                             <Info size={16} />
                           </div>
-                          <div className="flex-1">
-                            <p className={`text-sm ${notif.read ? 'text-gray-600 dark:text-gray-400' : 'text-gray-900 dark:text-white font-medium'}`}>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm ${notif.read ? 'text-gray-600 dark:text-gray-400' : 'text-gray-900 dark:text-white font-medium'} truncate`}>
                               {notif.title}
                             </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 break-words">
                               {notif.message}
                             </p>
                             <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">
@@ -462,11 +462,11 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
           onClick={() => setActiveTab && setActiveTab('profile')}
           className="flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded-xl transition-colors"
         >
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-bold text-gray-900 dark:text-white">
+          <div className="text-right flex flex-col items-end">
+            <p className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white truncate max-w-[75px] xs:max-w-[110px] sm:max-w-[160px]">
               {currentUser?.prenom || currentUser?.nom ? `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() : currentUser?.email?.split('@')[0] || 'Admin'}
             </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{currentUser?.role}</p>
+            <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 capitalize truncate max-w-[75px] xs:max-w-[110px] sm:max-w-[160px]">{currentUser?.role}</p>
           </div>
           {currentUser?.photo ? (
             <img src={currentUser.photo} alt="" className="w-9 h-9 rounded-full object-cover" referrerPolicy="no-referrer" />

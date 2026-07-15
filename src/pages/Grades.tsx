@@ -546,28 +546,89 @@ const Grades: React.FC = () => {
     return grade.studentName || 'Élève';
   };
 
-  // Run Simulated Time Leap of (e.g. 50 hours)
-  const accelerateTime = () => {
+  // Run Time Leap of (+50 hours) directly in Firestore database in real-time
+  const accelerateTime = async () => {
     setVirtualHoursAdded(prev => prev + 50);
-    notifySuccess("⏰ Simulation : Saut temporel de +50 heures appliqué ! Toutes les notes hors délai de d'attente se verrouillent.");
     
-    // Add safety audit log entry
-    const newAuditLog: SafetyAuditLog = {
-      id: `sys_acc_${Date.now()}`,
-      timestamp: new Date(),
-      actorId: currentUser?.id || 'sim',
-      actorName: `${currentUser?.prenom} ${currentUser?.nom}`,
-      actorRole: currentUser?.role || 'user',
-      event: 'GRADE_AUTO_LOCK_TRIGGERED',
-      severity: 'INFO',
-      details: 'Simulation : Fermeture forcée automatique de toutes les notes par expiration standard'
-    };
-    setSafetyLogs(prev => [newAuditLog, ...prev]);
+    try {
+      const activeGradesToUpdate = grades.filter(g => g.status !== 'VERROUILLEE');
+      let updatedCount = 0;
+      
+      for (const grade of activeGradesToUpdate) {
+        const currentDeadline = grade.lockDeadline instanceof Date ? grade.lockDeadline : new Date(grade.lockDeadline || 0);
+        const newDeadline = new Date(currentDeadline.getTime() - 50 * 60 * 60 * 1000);
+        
+        const currentDate = grade.date?.toDate ? grade.date.toDate() : new Date(grade.date || 0);
+        const newDate = new Date(currentDate.getTime() - 50 * 60 * 60 * 1000);
+        
+        const isNowLocked = Date.now() >= newDeadline.getTime();
+        
+        const gradeRef = doc(db, 'grades', grade.id);
+        await updateDoc(gradeRef, {
+          lockDeadline: Timestamp.fromDate(newDeadline),
+          date: Timestamp.fromDate(newDate),
+          status: isNowLocked ? 'VERROUILLEE' : (grade.status || 'EN_ATTENTE_VALIDATION')
+        });
+        updatedCount++;
+      }
+      
+      notifySuccess(`⏰ Horloge avancée en temps réel ! ${updatedCount} note(s) mise(s) à jour et verrouillée(s) directement dans Firestore.`);
+      
+      // Add safety audit log entry to Firestore
+      const logRef = doc(collection(db, 'safety_audit_logs'));
+      await setDoc(logRef, {
+        timestamp: serverTimestamp(),
+        actorId: currentUser?.id || 'admin',
+        actorName: `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() || 'Administrateur',
+        actorRole: currentUser?.role || 'admin',
+        event: 'REAL_TIME_CLOCK_ACCELERATION',
+        severity: 'WARNING',
+        details: `Avancement réel de l'horloge (+50h) appliqué à ${updatedCount} note(s) dans la base Firestore.`
+      });
+      
+    } catch (error) {
+      console.error("Error accelerating clock in real-time:", error);
+      notifyError("Erreur lors de la mise à jour des notes en temps réel.");
+    }
   };
 
-  const resetTimeAcceleration = () => {
+  const resetTimeAcceleration = async () => {
     setVirtualHoursAdded(0);
-    notifySuccess("⏰ Simulation : Temps réinitialisé à l'horodatage serveur réel.");
+    
+    try {
+      const gradesToReset = grades.filter(g => g.status === 'VERROUILLEE' || g.status === 'EN_ATTENTE_VALIDATION');
+      let resetCount = 0;
+      
+      for (const grade of gradesToReset) {
+        const now = new Date();
+        const newDeadline = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+        
+        const gradeRef = doc(db, 'grades', grade.id);
+        await updateDoc(gradeRef, {
+          date: Timestamp.fromDate(now),
+          lockDeadline: Timestamp.fromDate(newDeadline),
+          status: 'EN_ATTENTE_VALIDATION'
+        });
+        resetCount++;
+      }
+      
+      notifySuccess(`⏰ Temps réel restauré ! ${resetCount} note(s) réinitialisée(s) à l'heure actuelle et déverrouillée(s) dans Firestore.`);
+      
+      // Add safety audit log entry to Firestore
+      const logRef = doc(collection(db, 'safety_audit_logs'));
+      await setDoc(logRef, {
+        timestamp: serverTimestamp(),
+        actorId: currentUser?.id || 'admin',
+        actorName: `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() || 'Administrateur',
+        actorRole: currentUser?.role || 'admin',
+        event: 'REAL_TIME_CLOCK_RESET',
+        severity: 'INFO',
+        details: `Réinitialisation de l'horloge et déverrouillage de ${resetCount} note(s) dans Firestore.`
+      });
+    } catch (error) {
+      console.error("Error resetting clock in real-time:", error);
+      notifyError("Erreur lors de la réinitialisation de l'horloge.");
+    }
   };
 
   // Check if grade edit is permitted
@@ -1094,15 +1155,15 @@ const Grades: React.FC = () => {
         </div>
       </div>
 
-      {/* Simulator Side Panel - Crucial for Edu-Nify Demonstrations! */}
+      {/* Real-time Security Evaluation Controls */}
       <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-5 rounded-3xl border border-slate-800 shadow-lg flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="flex h-2.5 w-2.5 rounded-full bg-indigo-400 animate-ping" />
-            <h4 className="text-sm font-black uppercase tracking-widest text-indigo-300">Sandbox d'Évaluation de Sécurité (Simulation)</h4>
+            <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
+            <h4 className="text-sm font-black uppercase tracking-widest text-emerald-300">Contrôle d'Évaluation de Sécurité & Clôture Temps Réel</h4>
           </div>
           <p className="text-xs text-indigo-100/80 max-w-2xl">
-            Permet aux auditeurs administratifs d'Edu-Nify d'accélérer artificiellement l'heure d'enregistrement pour vérifier le verrouillage automatique après 48 heures ou simuler une déconnexion satellite locale de Libreville (Gabon).
+            Gestion administrative en temps réel pour déclencher instantanément le verrouillage automatique réglementaire de 48 heures directement dans la base de données Firestore ou basculer le réseau satellite hors-ligne local.
           </p>
         </div>
 
@@ -1112,15 +1173,15 @@ const Grades: React.FC = () => {
             onClick={accelerateTime}
             className="px-4 py-2 text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
           >
-            ⏳ Avancer Horloge (+50h)
+            ⏳ Avancer Horloge en Temps Réel (+50h)
           </button>
           
           {virtualHoursAdded > 0 && (
             <button
               onClick={resetTimeAcceleration}
-              className="px-3 py-2 text-xs font-bold bg-gray-700 hover:bg-gray-650 rounded-xl transition-all flex items-center gap-1"
+              className="px-3 py-2 text-xs font-bold bg-gray-700 hover:bg-gray-650 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
             >
-              🔄 Heure Réelle
+              🔄 Restaurer Heure Actuelle
             </button>
           )}
 
@@ -1130,19 +1191,19 @@ const Grades: React.FC = () => {
               const prev = isOfflineMode;
               setIsOfflineMode(!prev);
               if (prev) {
-                notifySuccess("📶 Mode En-Ligne restauré ! Prêt pour la synchronisation.");
+                notifySuccess("📶 Mode En-Ligne restauré ! Prêt pour la synchronisation en temps réel.");
               } else {
-                notifyError("📴 Mode Offline activé ! Les notes ajoutées seront mises en cache locale.");
+                notifyError("📴 Mode Hors-Ligne activé ! Les notes ajoutées seront sauvegardées localement.");
               }
             }}
-            className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all flex items-center gap-2 ${
+            className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
               isOfflineMode 
                 ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-md' 
                 : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30'
             }`}
           >
             {isOfflineMode ? <Wifi size={13} className="animate-pulse" /> : <Wifi size={13} />}
-            {isOfflineMode ? "Simulation : Hors-Ligne" : "Simuler Hors-Ligne"}
+            {isOfflineMode ? "Réseau : Hors-Ligne" : "Passer Hors-Ligne (Temps Réel)"}
           </button>
 
           {/* Sync offline local state */}
