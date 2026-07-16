@@ -387,11 +387,12 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
         <div className="relative" ref={notifRef}>
           <button 
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="relative p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-600 cursor-pointer"
+            title={t('notifications')}
           >
             <Bell size={20} />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white dark:border-gray-800 flex items-center justify-center text-[8px] font-bold text-white">
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 rounded-full border-2 border-white dark:border-gray-800 flex items-center justify-center text-[8px] font-black text-white shadow-sm">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
@@ -404,7 +405,7 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
                 {unreadCount > 0 && (
                   <button 
                     onClick={markAllAsRead}
-                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium flex items-center gap-1"
+                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium flex items-center gap-1 cursor-pointer"
                   >
                     <Check size={14} />
                     {t('mark_all_read')}
@@ -431,10 +432,10 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
                             <Info size={16} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className={`text-sm ${notif.read ? 'text-gray-600 dark:text-gray-400' : 'text-gray-900 dark:text-white font-medium'} truncate`}>
+                            <p className={`text-sm ${notif.read ? 'text-gray-600 dark:text-gray-400' : 'text-gray-900 dark:text-white font-medium'} break-words whitespace-normal`}>
                               {notif.title}
                             </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 break-words">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 break-words whitespace-normal">
                               {notif.message}
                             </p>
                             <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">
@@ -460,16 +461,11 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
         
         <button 
           onClick={() => setActiveTab && setActiveTab('profile')}
-          className="flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded-xl transition-colors"
+          className="flex items-center hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded-xl transition-all border border-transparent hover:border-gray-200 dark:hover:border-gray-600 cursor-pointer relative"
+          title={currentUser?.prenom || currentUser?.nom ? `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() : currentUser?.email || 'Profil'}
         >
-          <div className="text-right flex flex-col items-end">
-            <p className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white truncate max-w-[75px] xs:max-w-[110px] sm:max-w-[160px]">
-              {currentUser?.prenom || currentUser?.nom ? `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() : currentUser?.email?.split('@')[0] || 'Admin'}
-            </p>
-            <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 capitalize truncate max-w-[75px] xs:max-w-[110px] sm:max-w-[160px]">{currentUser?.role}</p>
-          </div>
           {currentUser?.photo ? (
-            <img src={currentUser.photo} alt="" className="w-9 h-9 rounded-full object-cover" referrerPolicy="no-referrer" />
+            <img src={currentUser.photo} alt="" className="w-9 h-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 shadow-sm" referrerPolicy="no-referrer" />
           ) : (
             <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm uppercase">
               {currentUser?.prenom?.[0] || currentUser?.email?.[0] || 'A'}

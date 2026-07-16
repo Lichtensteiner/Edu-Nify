@@ -272,12 +272,44 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
           })}
         </div>
 
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 shrink-0">
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700 shrink-0 space-y-3 bg-gray-50/30 dark:bg-gray-800/20">
+          {currentUser && (
+            <button
+              onClick={() => handleTabClick('profile')}
+              className={`w-full flex items-center gap-3 p-2.5 rounded-2xl transition-all text-left border border-transparent hover:border-gray-150 dark:hover:border-gray-700 hover:bg-white dark:hover:bg-gray-750/50 group shadow-sm/5 hover:shadow-sm ${
+                activeTab === 'profile' ? 'bg-indigo-50/40 dark:bg-indigo-950/20 border-indigo-100 dark:border-indigo-950/50' : ''
+              }`}
+            >
+              {currentUser?.photo ? (
+                <img 
+                  src={currentUser.photo} 
+                  alt="" 
+                  className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0 shadow-inner group-hover:scale-105 transition-transform" 
+                  referrerPolicy="no-referrer" 
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-sm uppercase shrink-0 group-hover:scale-105 transition-transform border border-indigo-100/50 dark:border-indigo-950/50 shadow-inner">
+                  {currentUser?.prenom?.[0] || currentUser?.nom?.[0] || currentUser?.email?.[0] || 'A'}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm font-black text-gray-950 dark:text-white truncate leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  {currentUser?.prenom || currentUser?.nom 
+                    ? `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() 
+                    : currentUser?.email?.split('@')[0] || 'Utilisateur'}
+                </p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 capitalize truncate font-bold tracking-wider mt-0.5">
+                  {currentUser?.role || 'Compte'}
+                </p>
+              </div>
+            </button>
+          )}
+
           <button 
             onClick={logout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-600 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-all font-semibold text-xs cursor-pointer active:scale-98"
           >
-            <LogOut size={20} />
+            <LogOut size={18} />
             {t('logout')}
           </button>
         </div>
