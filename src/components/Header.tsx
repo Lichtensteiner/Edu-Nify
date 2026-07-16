@@ -456,22 +456,6 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
             </div>
           )}
         </div>
-        
-        <div className="h-8 w-px bg-gray-200 dark:bg-gray-700 mx-1"></div>
-        
-        <button 
-          onClick={() => setActiveTab && setActiveTab('profile')}
-          className="flex items-center hover:bg-gray-50 dark:hover:bg-gray-700 p-2 rounded-xl transition-all border border-transparent hover:border-gray-200 dark:hover:border-gray-600 cursor-pointer relative"
-          title={currentUser?.prenom || currentUser?.nom ? `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() : currentUser?.email || 'Profil'}
-        >
-          {currentUser?.photo ? (
-            <img src={currentUser.photo} alt="" className="w-9 h-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 shadow-sm" referrerPolicy="no-referrer" />
-          ) : (
-            <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm uppercase">
-              {currentUser?.prenom?.[0] || currentUser?.email?.[0] || 'A'}
-            </div>
-          )}
-        </button>
       </div>
     </header>
     
