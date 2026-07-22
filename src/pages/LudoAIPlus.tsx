@@ -451,7 +451,7 @@ const LudoAIPlus: React.FC = () => {
                 <Sparkles size={14} />
                 AI-Powered Tutoring
               </div>
-              <h1 className="text-4xl font-black tracking-tight">Ludo AI+</h1>
+              <h1 className="text-4xl font-black tracking-tight">Edu-Nify IA</h1>
               <p className="text-indigo-100 max-w-md">Bonjour {currentUser.prenom} ! J'ai analysé tes notes des 3 derniers mois pour t'aider à exceller.</p>
             </div>
             <div className="flex flex-col items-center gap-2">

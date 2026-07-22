@@ -852,7 +852,7 @@ export const ptTranslations = {
   "house_description_placeholder": "Descrição da casa...",
   "photo_updated_success": "",
   "ai_feedback_shared_msg": "",
-  "ludo_ai_plus": "Ludo AI+ Tutoring",
+  "ludo_ai_plus": "Edu-Nify IA",
   "grades": "Notas",
   "clubs": "Clubes",
   "finance": "Financiar",
