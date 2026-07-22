@@ -55,7 +55,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
         { id: 'dashboard', labelKey: 'dashboard', icon: LayoutDashboard, roles: ['admin', 'enseignant', 'personnel administratif', 'parent', 'cuisinier'] },
         { id: 'student_dashboard', labelKey: 'student_dashboard', icon: LayoutDashboard, roles: ['élève'] },
         { id: 'newsfeed', labelKey: 'newsfeed', icon: MessageSquare, roles: ['admin', 'enseignant', 'personnel administratif', 'élève', 'parent'] },
-        { id: 'directory', labelKey: 'directory', icon: BookUser, roles: ['admin', 'enseignant', 'personnel administratif'] },
+        { id: 'directory', labelKey: 'directory', icon: BookUser, roles: ['admin', 'enseignant', 'personnel administratif', 'élève'] },
         { id: 'messaging', labelKey: 'messaging', icon: MessageCircle, roles: ['admin', 'enseignant', 'personnel administratif', 'élève', 'parent'] },
         { id: 'profile', labelKey: 'profile', icon: UserCircle, roles: ['admin', 'enseignant', 'personnel administratif', 'élève', 'parent'] },
         { id: 'about', labelKey: 'about', icon: Info, roles: ['admin', 'enseignant', 'personnel administratif', 'élève', 'parent'] },
@@ -209,7 +209,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
               // Direct filtered items for Students (élève)
               if (role === 'élève') {
                 const allowedStudentTabs = [
-                  'student_dashboard', 'messaging', 'profile', 'grades', 'homework', 'student_card', 'canteen', 'planning', 'settings'
+                  'student_dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 'grades', 'homework', 'student_card', 'canteen', 'planning', 'settings'
                 ];
                 if (!allowedStudentTabs.includes(item.id)) return false;
               }
