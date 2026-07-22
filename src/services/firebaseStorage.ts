@@ -53,10 +53,15 @@ export async function compressImage(file: File, maxWidth = 1920, maxHeight = 108
   if (!file.type.startsWith('image/')) return file;
   
   return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      resolve(file);
+    }, 3000);
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
+        clearTimeout(timeout);
         let width = img.width;
         let height = img.height;
         
@@ -90,16 +95,22 @@ export async function compressImage(file: File, maxWidth = 1920, maxHeight = 108
           resolve(file);
         }
       };
-      img.onerror = () => resolve(file);
+      img.onerror = () => {
+        clearTimeout(timeout);
+        resolve(file);
+      };
       img.src = e.target?.result as string;
     };
-    reader.onerror = () => resolve(file);
+    reader.onerror = () => {
+      clearTimeout(timeout);
+      resolve(file);
+    };
     reader.readAsDataURL(file);
   });
 }
 
 /**
- * Converts a file/blob to Data URL as fallback if Firebase Storage fails
+ * Converts a file/blob to Data URL as fallback if Firebase Storage fails or hangs
  */
 export function fileToDataURL(file: Blob | File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -113,7 +124,7 @@ export function fileToDataURL(file: Blob | File): Promise<string> {
 /**
  * Uploads media file to Firebase Storage under path:
  * stories/{schoolId}/{userId}/{timestamp}_{fileName}
- * Falls back safely to DataURL if storage is unavailable or errors out.
+ * Times out after 5s to seamlessly fall back to DataURL if Storage bucket is not available or blocked.
  */
 export async function uploadStoryMedia(
   file: File,
@@ -124,6 +135,8 @@ export async function uploadStoryMedia(
   const type = getFileType(file.name) || 'document';
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
 
+  if (onProgress) onProgress(20);
+
   let blobToUpload: Blob = file;
   if (type === 'image') {
     try {
@@ -133,39 +146,69 @@ export async function uploadStoryMedia(
     }
   }
 
+  if (onProgress) onProgress(40);
+
   const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
   const path = `stories/${schoolId}/${userId}/${Date.now()}_${sanitizedFileName}`;
 
-  let url: string;
+  let url: string = '';
 
-  try {
-    const storageRef = ref(storage, path);
-    const uploadTask = uploadBytesResumable(storageRef, blobToUpload);
+  const tryFirebaseStorageUpload = (): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      let isSettled = false;
+      const storageRef = ref(storage, path);
+      const uploadTask = uploadBytesResumable(storageRef, blobToUpload);
 
-    url = await new Promise<string>((resolve, reject) => {
+      // 5 second timeout to prevent hanging if Firebase Storage is blocked/unconfigured
+      const timeoutId = setTimeout(() => {
+        if (!isSettled) {
+          isSettled = true;
+          try {
+            uploadTask.cancel();
+          } catch (e) {
+            // Ignore cancel errors
+          }
+          reject(new Error('Firebase Storage upload timeout'));
+        }
+      }, 5000);
+
       uploadTask.on(
         'state_changed',
         (snapshot) => {
+          if (isSettled) return;
           const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-          if (onProgress) onProgress(progress);
+          const scaledProgress = 40 + Math.round((progress * 50) / 100);
+          if (onProgress) onProgress(scaledProgress);
         },
         (error) => {
-          console.warn('Firebase Storage upload failed, utilizing resilient DataURL fallback:', error);
-          reject(error);
+          if (!isSettled) {
+            isSettled = true;
+            clearTimeout(timeoutId);
+            reject(error);
+          }
         },
         async () => {
-          try {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve(downloadURL);
-          } catch (err) {
-            reject(err);
+          if (!isSettled) {
+            isSettled = true;
+            clearTimeout(timeoutId);
+            try {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve(downloadURL);
+            } catch (err) {
+              reject(err);
+            }
           }
         }
       );
     });
+  };
+
+  try {
+    url = await tryFirebaseStorageUpload();
+    if (onProgress) onProgress(100);
   } catch (storageError) {
-    console.warn('Using resilient Data URL storage fallback for story media');
-    if (onProgress) onProgress(50);
+    console.warn('Firebase Storage upload unavailable or timed out, utilizing resilient Data URL fallback:', storageError);
+    if (onProgress) onProgress(70);
     url = await fileToDataURL(blobToUpload);
     if (onProgress) onProgress(100);
   }
@@ -178,3 +221,4 @@ export async function uploadStoryMedia(
     format: ext
   };
 }
+
