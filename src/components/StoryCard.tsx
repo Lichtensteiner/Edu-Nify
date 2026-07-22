@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Story, CommentItem, subscribeToComments, addCommentToStory, toggleLikeStory, deleteStory, updateStoryText, markStoryViewed } from '../services/storyService';
+import { Story, CommentItem, subscribeToComments, addCommentToStory, toggleLikeStory, deleteStory, softDeleteStory, updateStoryText, markStoryViewed } from '../services/storyService';
 import { DocumentViewer } from './DocumentViewer';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Heart, MessageCircle, Eye, MoreVertical, Edit, Trash2, Send, X, Maximize2, Sparkles, ShieldCheck, User } from 'lucide-react';
+import { Heart, MessageCircle, Eye, MoreVertical, Edit, Trash2, Send, X, Maximize2, Sparkles, ShieldCheck, User, EyeOff, Trash } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface StoryCardProps {
@@ -30,12 +31,19 @@ export const StoryCard: React.FC<StoryCardProps> = ({
 
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(story.text || story.content || '');
+  const [isHiddenLocally, setIsHiddenLocally] = useState(false);
+
+  // Modals state
+  const [showSoftDeleteModal, setShowSoftDeleteModal] = useState(false);
+  const [showPermanentDeleteModal, setShowPermanentDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Lightbox modal state for image zoom
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
   const isAuthor = currentUser?.id === story.authorId || currentUser?.uid === story.authorId;
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'Administrateur d\'établissement' || currentUser?.role === 'Super Administrateur';
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'Administrateur d\'établissement' || currentUser?.role === 'Super Administrateur' || currentUser?.role === 'Directeur';
+  const isStudent = currentUser?.role === 'élève' || currentUser?.role === 'student';
   const hasLiked = currentUser ? story.likes?.includes(currentUser.id || currentUser.uid) : false;
 
   useEffect(() => {
@@ -43,6 +51,34 @@ export const StoryCard: React.FC<StoryCardProps> = ({
     const unsub = subscribeToComments(story.id, (fetched) => setComments(fetched));
     return () => unsub();
   }, [showComments, story.id]);
+
+  if (isHiddenLocally) return null;
+
+  const handleSoftDeleteConfirm = async () => {
+    setIsDeleting(true);
+    try {
+      await softDeleteStory(story, currentUser);
+      setShowSoftDeleteModal(false);
+      if (notifyDelete) notifyDelete('Publication déplacée dans la corbeille.');
+    } catch (err) {
+      if (notifyError) notifyError('Erreur lors du déplacement dans la corbeille.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handlePermanentDeleteConfirm = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteStory(story.id);
+      setShowPermanentDeleteModal(false);
+      if (notifyDelete) notifyDelete('Publication définitivement supprimée.');
+    } catch (err) {
+      if (notifyError) notifyError('Erreur lors de la suppression définitive.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleMouseEnter = () => {
     const userId = currentUser?.id || currentUser?.uid;
@@ -152,27 +188,46 @@ export const StoryCard: React.FC<StoryCardProps> = ({
           </div>
         </div>
 
-        {(isAuthor || isAdmin) && (
-          <div className="relative group">
-            <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-              <MoreVertical size={20} />
-            </button>
-            <div className="absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 hidden group-hover:block z-20 overflow-hidden">
+        <div className="relative group">
+          <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+            <MoreVertical size={20} />
+          </button>
+          <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 hidden group-hover:block z-20 overflow-hidden">
+            {(isAuthor || isAdmin) && (
               <button
                 onClick={() => setIsEditing(true)}
                 className="w-full text-left px-4 py-2.5 text-xs sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 font-medium"
               >
-                <Edit size={16} /> Modifier
+                <Edit size={16} /> Modifier la publication
               </button>
+            )}
+
+            <button
+              onClick={() => setIsHiddenLocally(true)}
+              className="w-full text-left px-4 py-2.5 text-xs sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 font-medium"
+            >
+              <EyeOff size={16} /> Masquer pour moi
+            </button>
+
+            {!isStudent && (isAuthor || isAdmin) && (
               <button
-                onClick={handleDelete}
+                onClick={() => setShowSoftDeleteModal(true)}
+                className="w-full text-left px-4 py-2.5 text-xs sm:text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 flex items-center gap-2 font-medium border-t border-gray-100 dark:border-gray-700"
+              >
+                <Trash size={16} /> Mettre dans la corbeille
+              </button>
+            )}
+
+            {isAdmin && (
+              <button
+                onClick={() => setShowPermanentDeleteModal(true)}
                 className="w-full text-left px-4 py-2.5 text-xs sm:text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center gap-2 font-medium"
               >
-                <Trash2 size={16} /> Supprimer
+                <Trash2 size={16} /> Supprimer définitivement
               </button>
-            </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Content */}
@@ -394,6 +449,32 @@ export const StoryCard: React.FC<StoryCardProps> = ({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Soft Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={showSoftDeleteModal}
+        onClose={() => setShowSoftDeleteModal(false)}
+        onConfirm={handleSoftDeleteConfirm}
+        title="Déplacer dans la corbeille"
+        message="Voulez-vous déplacer cette publication dans la corbeille ? Vous pourrez la restaurer à tout moment pendant 30 jours."
+        confirmText="Déplacer"
+        cancelText="Annuler"
+        isPermanent={false}
+        isLoading={isDeleting}
+      />
+
+      {/* Permanent Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={showPermanentDeleteModal}
+        onClose={() => setShowPermanentDeleteModal(false)}
+        onConfirm={handlePermanentDeleteConfirm}
+        title="Suppression définitive"
+        message="Cette action est irréversible. La publication, ses médias, commentaires et réactions seront définitivement effacés. Continuer ?"
+        confirmText="Supprimer définitivement"
+        cancelText="Annuler"
+        isPermanent={true}
+        isLoading={isDeleting}
+      />
     </div>
   );
 };

@@ -6,6 +6,7 @@ export const ptTranslations = {
   "resource_type": "Tipo de recurso",
   "messaging": "Mensagens",
   "library": "Biblioteca",
+  "trash": "Lixeira",
   "reports": "Relatórios",
   "evaluate": "Avaliar",
   "users": "Usuários",

@@ -12,6 +12,7 @@ interface Translations {
 const translations: Translations = {
   // Sidebar
   'library': { fr: 'Bibliothèque', en: 'Library', es: 'Biblioteca', zh: '图书馆', ja: '図書館' },
+  'trash': { fr: 'Corbeille', en: 'Trash', es: 'Papelera', zh: '回收站', ja: 'ゴミ箱' },
   'dossiers_agents': { fr: 'Portail Dossiers & Agents', en: 'Dossiers & Agents Portal', es: 'Portal de Expedientes y Agentes', zh: '档案 with 代理门户', ja: 'ドシエ＆エージェントポータル' },
   'tech_sheet': { fr: 'Fiche Technique', en: 'Technical Sheet', es: 'Ficha Técnica', zh: '技术单', ja: '技術シート' },
   'responsibility_zones': { fr: 'Bureau Direction', en: 'Directorate Office', es: 'Oficina de Dirección', zh: '处室方向', ja: '役員室方向' },

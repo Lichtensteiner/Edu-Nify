@@ -537,5 +537,18 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAdmin() || hasResponsibility('gestionnaire_comptable');
     }
+
+    // Central Trash Collection
+    match /trash/{itemId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isTeacher() || 
+        isStaff() || 
+        resource.data.deletedBy.id == request.auth.uid || 
+        resource.data.authorId == request.auth.uid
+      );
+      allow create, update: if isAuthenticated() && (isAdmin() || isTeacher() || isStaff());
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.deletedBy.id == request.auth.uid);
+    }
   }
 }

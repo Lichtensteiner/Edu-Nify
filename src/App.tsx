@@ -63,11 +63,13 @@ import TermsAndConditions from "./pages/TermsAndConditions";
 import Users from "./pages/Users";
 import DossiersAgents from "./pages/DossiersAgents";
 import TechSheet from "./pages/TechSheet";
+import { Trash } from "./pages/Trash";
 
 function AppContent() {
   const { currentUser, loading } = useAuth();
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { notifySuccess, notifyError } = useNotification();
   
   // Navigation states
   const [activeTab, setActiveTab] = useState<string>("dashboard");
@@ -298,6 +300,8 @@ function AppContent() {
         return <DossiersAgents />;
       case "tech_sheet":
         return <TechSheet />;
+      case "trash":
+        return <Trash currentUser={currentUser} notifySuccess={notifySuccess} notifyError={notifyError} />;
       default:
         return (
           <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">

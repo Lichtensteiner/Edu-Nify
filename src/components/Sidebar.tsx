@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, CalendarCheck, FileText, Settings, BookOpen, Code, LogOut, ScanLine, Smartphone, CreditCard, Trophy, ScanFace, Activity, GraduationCap, UserCircle, Castle, X, Calendar as CalendarIcon, MessageSquare, BookUser, MessageCircle, Info, Sparkles, Wallet, ShieldAlert, History, Award, ShieldCheck, Scale, Utensils, Library, Vote, FileBadge, Building2, FolderClosed, Cpu } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarCheck, FileText, Settings, BookOpen, Code, LogOut, ScanLine, Smartphone, CreditCard, Trophy, ScanFace, Activity, GraduationCap, UserCircle, Castle, X, Calendar as CalendarIcon, MessageSquare, BookUser, MessageCircle, Info, Sparkles, Wallet, ShieldAlert, History, Award, ShieldCheck, Scale, Utensils, Library, Vote, FileBadge, Building2, FolderClosed, Cpu, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useEstablishment } from '../contexts/EstablishmentContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -111,6 +111,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
         { id: 'dossiers_agents', labelKey: 'dossiers_agents', icon: FileText, roles: ['admin'] },
         { id: 'tech_sheet', labelKey: 'tech_sheet', icon: Cpu, roles: ['admin'] },
         { id: 'settings', labelKey: 'settings', icon: Settings, roles: ['admin', 'enseignant', 'personnel administratif', 'parent', 'cuisinier', 'élève'] },
+        { id: 'trash', labelKey: 'trash', icon: Trash2, roles: ['admin', 'enseignant', 'personnel administratif'] },
       ]
     }
   ];
@@ -193,7 +194,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 const allowedTeacherTabs = [
                   'dashboard', 'messaging', 'profile', 
                   'digital_binder', 'homework', 'grades', 
-                  'planning', 'attendance', 'ai_assistant', 'settings'
+                  'planning', 'attendance', 'ai_assistant', 'settings', 'trash'
                 ];
                 if (!allowedTeacherTabs.includes(item.id)) return false;
               }

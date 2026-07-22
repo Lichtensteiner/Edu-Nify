@@ -187,7 +187,7 @@ const LudoAIPlus: React.FC = () => {
     setError(null);
     try {
       const prompt = `
-        En tant que tuteur pédagogique expert nommé Ludo AI+, analyse les notes suivantes d'un élève sur les 3 derniers mois :
+        En tant que tuteur pédagogique expert nommé Edu-Nify IA, analyse les notes suivantes d'un élève sur les 3 derniers mois :
         ${JSON.stringify(data.map(g => ({ 
           subject: g.subject, 
           score: g.score, 
@@ -248,7 +248,7 @@ const LudoAIPlus: React.FC = () => {
       setAnalysis(result);
     } catch (err: any) {
       console.error("AI Analysis Error:", err);
-      setError(`Ludo AI+ a rencontré une erreur lors de l'analyse : ${err?.message || "Erreur de connexion"}`);
+      setError(`Edu-Nify IA a rencontré une erreur lors de l'analyse : ${err?.message || "Erreur de connexion"}`);
     } finally {
       setAnalyzing(false);
     }
@@ -299,7 +299,7 @@ const LudoAIPlus: React.FC = () => {
 
     try {
       const prompt = `
-        En tant qu'assistant pédagogique expert et tuteur nommé Ludo AI+, rédige un contenu éducatif complet et rigoureux très bien structuré destiné aux élèves de la classe de "${selectedClass}".
+        En tant qu'assistant pédagogique expert et tuteur nommé Edu-Nify IA, rédige un contenu éducatif complet et rigoureux très bien structuré destiné aux élèves de la classe de "${selectedClass}".
         
         Paramètres du support :
         - Matière : "${subject}"
@@ -350,7 +350,7 @@ const LudoAIPlus: React.FC = () => {
 
     try {
       const systemPrompt = `
-        Tu es Ludo AI+, l'assistant de formation pour enseignants de notre école.
+        Tu es Edu-Nify IA, l'assistant de formation pour enseignants de notre école.
         Voici la version de brouillon actuelle du cours/support générée :
         ---
         ${generatedContent}
@@ -376,7 +376,7 @@ const LudoAIPlus: React.FC = () => {
           text: `Modification prise en compte ! J'ai ajusté le contenu scolaire en appliquant votre consigne : "${userMessage}". Le support révisé est disponible ci-dessus.`
         }]);
       } else {
-        throw new Error("Aucun texte reçu de l'Assistant Ludo AI.");
+        throw new Error("Aucun texte reçu de l'Assistant Edu-Nify IA.");
       }
     } catch (err: any) {
       console.error("Conversation update error:", err);
@@ -477,7 +477,7 @@ const LudoAIPlus: React.FC = () => {
             </div>
             <div>
               <h2 className="text-xl font-bold dark:text-white">Analyse en cours...</h2>
-              <p className="text-gray-500 mt-2">Ludo AI+ examine tes {grades.length} dernières évaluations selon le système de pondération.</p>
+              <p className="text-gray-500 mt-2">Edu-Nify IA examine tes {grades.length} dernières évaluations selon le système de pondération.</p>
             </div>
           </div>
         ) : error ? (
@@ -643,7 +643,7 @@ const LudoAIPlus: React.FC = () => {
 
             <div className="text-center py-10">
                 <p className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">
-                  Ludo AI+ croit en toi ! 🚀
+                  Edu-Nify IA croit en toi ! 🚀
                 </p>
             </div>
           </div>
@@ -651,7 +651,7 @@ const LudoAIPlus: React.FC = () => {
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-12 border border-gray-100 dark:border-gray-700 text-center space-y-4">
             <BookOpen className="text-gray-300 mx-auto" size={48} />
             <h2 className="text-xl font-bold dark:text-white">Pas encore assez de données</h2>
-            <p className="text-gray-500">Continue à travailler dur ! Ludo AI+ aura besoin de quelques notes au cours des 3 derniers mois pour générer une analyse précise.</p>
+            <p className="text-gray-500">Continue à travailler dur ! Edu-Nify IA aura besoin de quelques notes au cours des 3 derniers mois pour générer une analyse précise.</p>
           </div>
         )}
       </div>
@@ -671,7 +671,7 @@ const LudoAIPlus: React.FC = () => {
               Intelligence Pédagogique
             </div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight bg-clip-text bg-gradient-to-r from-white via-indigo-100 to-indigo-200">
-              Ludo AI+ : Assistant Certifié
+              Edu-Nify IA : Assistant Certifié
             </h1>
             <p className="text-gray-350 text-sm max-w-xl">
               Générez instantanément des leçons, fiches de révision et exercices d'application adaptés aux besoins précis de chaque classe, modifiez-les à volonté par conversation de clavardage, puis publiez-les directement !
@@ -859,7 +859,7 @@ const LudoAIPlus: React.FC = () => {
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
                 <h3 className="text-sm font-black text-slate-800 dark:text-gray-200 uppercase tracking-widest">
-                  Espace Brouillon - Ludo AI+
+                  Espace Brouillon - Edu-Nify IA
                 </h3>
               </div>
 
@@ -907,7 +907,7 @@ const LudoAIPlus: React.FC = () => {
                     </div>
                   </div>
                   <div className="space-y-2 max-w-sm">
-                    <h3 className="text-lg font-bold text-slate-800 dark:text-white">Création du support par Ludo AI+...</h3>
+                    <h3 className="text-lg font-bold text-slate-800 dark:text-white">Création du support par Edu-Nify IA...</h3>
                     <p className="text-xs text-gray-500 leading-relaxed font-mono">
                       Adaptation au niveau pédagogique de la classe de {selectedClass}. Analyse des structures de cours, insertion d'illustrations pratiques et d'exercices d'entraînement.
                     </p>
@@ -982,7 +982,7 @@ const LudoAIPlus: React.FC = () => {
                     <div className="flex items-center gap-1.5">
                       <MessageSquare size={16} className="text-indigo-600 animate-pulse" />
                       <h4 className="text-xs font-black text-slate-800 dark:text-gray-300 uppercase tracking-wider">
-                        Converser avec Ludo AI+ pour corriger / enrichir
+                        Converser avec Edu-Nify IA pour corriger / enrichir
                       </h4>
                     </div>
 
@@ -1002,7 +1002,7 @@ const LudoAIPlus: React.FC = () => {
                           }`}
                         >
                           <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider">
-                            {msg.role === 'user' ? 'Vous' : 'Ludo AI+'}
+                            {msg.role === 'user' ? 'Vous' : 'Edu-Nify IA'}
                           </span>
                           <div
                             className={`p-3 rounded-2xl text-xs leading-normal ${
@@ -1019,7 +1019,7 @@ const LudoAIPlus: React.FC = () => {
                       {isApplyingChange && (
                         <div className="flex items-center gap-2 mr-auto bg-white dark:bg-gray-800 border border-gray-150 dark:border-gray-700 px-3.5 py-2.5 rounded-2xl rounded-tl-none text-xs text-indigo-600">
                           <Loader2 size={13} className="animate-spin" />
-                          <span className="font-semibold animate-pulse">Ludo AI+ révise le brouillon...</span>
+                          <span className="font-semibold animate-pulse">Edu-Nify IA révise le brouillon...</span>
                         </div>
                       )}
                     </div>

@@ -649,6 +649,7 @@
     "/rh_advances/{id}": { "schema": "rh_advances", "description": "Salary Advances" },
     "/rh_bulletin_config/{id}": { "schema": "rh_bulletin_config", "description": "School Bulletin Config" },
     "/finance_settings/{settingId}": { "schema": "finance_settings", "description": "Starting/initial balances and financial parameters per establishment" },
-    "/rh_generated_documents/{id}": { "schema": "rh_generated_documents", "description": "Archived official and AI-generated documents for staff" }
+    "/rh_generated_documents/{id}": { "schema": "rh_generated_documents", "description": "Archived official and AI-generated documents for staff" },
+    "/trash/{itemId}": { "schema": "trash", "description": "Soft deleted items stored temporarily for 30 days" }
   }
 }

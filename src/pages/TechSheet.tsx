@@ -768,7 +768,7 @@ export default function TechSheet() {
               <Sparkles className="w-5 h-5" />
             </div>
             <div className="space-y-1">
-              <h4 className="font-display font-semibold text-sm text-gray-900 dark:text-white">Module IA "Ludo AI Plus"</h4>
+              <h4 className="font-display font-semibold text-sm text-gray-900 dark:text-white">Module IA "Edu-Nify IA"</h4>
               <p className="text-xs text-gray-500 dark:text-gray-400">Moteur conversationnel avancé pour aider les enseignants à préparer des cours et guider les élèves avec des aides ciblées.</p>
             </div>
           </div>

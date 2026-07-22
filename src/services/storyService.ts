@@ -17,6 +17,8 @@ import {
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { UploadedMedia } from './firebaseStorage';
 
+import { moveToTrash } from './trashService';
+
 export interface CommentItem {
   id: string;
   authorId: string;
@@ -111,38 +113,9 @@ export function subscribeToStories(callback: (stories: Story[]) => void): () => 
   return onSnapshot(
     q,
     (snapshot) => {
-      const stories = snapshot.docs.map((d) => {
-        const data = d.data();
-        return {
-          id: d.id,
-          authorId: data.authorId,
-          authorName: data.authorName,
-          authorPhotoUrl: data.authorPhotoUrl,
-          role: data.role || 'enseignant',
-          text: data.text || data.content || '',
-          content: data.content || data.text || '',
-          media: Array.isArray(data.media)
-            ? data.media
-            : data.mediaUrl
-            ? [{ type: data.mediaType || 'image', url: data.mediaUrl, name: 'Fichier joint', size: 0, format: '' }]
-            : [],
-          createdAt: data.createdAt,
-          likes: Array.isArray(data.likes) ? data.likes : [],
-          views: data.views || 0,
-          viewers: Array.isArray(data.viewers) ? data.viewers : [],
-          commentsCount: data.commentsCount || 0,
-          schoolId: data.schoolId,
-          classId: data.classId
-        } as Story;
-      });
-      callback(stories);
-    },
-    (error) => {
-      console.error('Error listening to stories:', error);
-      // Fallback query from posts if stories snapshot fails
-      const postsQ = query(collection(db, POSTS_COLLECTION), orderBy('createdAt', 'desc'));
-      return onSnapshot(postsQ, (postSnap) => {
-        const fallbackStories = postSnap.docs.map((d) => {
+      const stories = snapshot.docs
+        .filter((d) => !d.data().deleted)
+        .map((d) => {
           const data = d.data();
           return {
             id: d.id,
@@ -161,13 +134,67 @@ export function subscribeToStories(callback: (stories: Story[]) => void): () => 
             likes: Array.isArray(data.likes) ? data.likes : [],
             views: data.views || 0,
             viewers: Array.isArray(data.viewers) ? data.viewers : [],
-            commentsCount: data.commentsCount || 0
+            commentsCount: data.commentsCount || 0,
+            schoolId: data.schoolId,
+            classId: data.classId
           } as Story;
         });
+      callback(stories);
+    },
+    (error) => {
+      console.error('Error listening to stories:', error);
+      // Fallback query from posts if stories snapshot fails
+      const postsQ = query(collection(db, POSTS_COLLECTION), orderBy('createdAt', 'desc'));
+      return onSnapshot(postsQ, (postSnap) => {
+        const fallbackStories = postSnap.docs
+          .filter((d) => !d.data().deleted)
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              authorId: data.authorId,
+              authorName: data.authorName,
+              authorPhotoUrl: data.authorPhotoUrl,
+              role: data.role || 'enseignant',
+              text: data.text || data.content || '',
+              content: data.content || data.text || '',
+              media: Array.isArray(data.media)
+                ? data.media
+                : data.mediaUrl
+                ? [{ type: data.mediaType || 'image', url: data.mediaUrl, name: 'Fichier joint', size: 0, format: '' }]
+                : [],
+              createdAt: data.createdAt,
+              likes: Array.isArray(data.likes) ? data.likes : [],
+              views: data.views || 0,
+              viewers: Array.isArray(data.viewers) ? data.viewers : [],
+              commentsCount: data.commentsCount || 0
+            } as Story;
+          });
         callback(fallbackStories);
       });
     }
   );
+}
+
+/**
+ * Soft deletes a story by moving it to trash
+ */
+export async function softDeleteStory(story: Story, currentUser: any): Promise<void> {
+  const authorName = currentUser.prenom || currentUser.nom
+    ? `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim()
+    : currentUser.email?.split('@')[0] || 'Utilisateur';
+
+  await moveToTrash({
+    type: 'story',
+    title: `${story.authorName || 'Publication'} - Histoire`,
+    content: story.text || story.content || '',
+    originalCollection: STORIES_COLLECTION,
+    originalId: story.id,
+    deletedBy: currentUser.id || currentUser.uid || '',
+    deletedByName: authorName,
+    data: story,
+    schoolId: story.schoolId || 'default'
+  });
 }
 
 /**
