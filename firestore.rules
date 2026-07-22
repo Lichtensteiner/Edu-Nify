@@ -257,7 +257,11 @@ service cloud.firestore {
     match /stories/{storyId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'views', 'viewers', 'commentsCount']) ||
+        isAdmin() || 
+        request.auth.uid == resource.data.authorId
+      );
       allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.authorId);
       
       // Comments subcollection
@@ -272,7 +276,11 @@ service cloud.firestore {
     match /posts/{postId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'views', 'viewers', 'commentsCount']) ||
+        isAdmin() || 
+        request.auth.uid == resource.data.authorId
+      );
       allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.authorId);
       
       // Comments subcollection
