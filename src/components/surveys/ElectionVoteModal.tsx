@@ -42,6 +42,20 @@ export const ElectionVoteModal: React.FC<ElectionVoteModalProps> = ({
 
   if (!isOpen || !election) return null;
 
+  const isParent = currentUser?.role === 'parent';
+  const hasAssociatedStudents = (user: any): boolean => {
+    if (!user) return false;
+    if (user.role !== 'parent') return true;
+    if (Array.isArray(user.children_ids) && user.children_ids.length > 0) return true;
+    if (Array.isArray(user.children) && user.children.length > 0) return true;
+    if (Array.isArray(user.enfants) && user.enfants.length > 0) return true;
+    if (Array.isArray(user.studentIds) && user.studentIds.length > 0) return true;
+    if (user.childId || user.studentId || user.student_id || user.assignedStudentId) return true;
+    if (user.classe || user.student_email || user.email_eleve) return true;
+    return false;
+  };
+
+  const parentHasChildren = hasAssociatedStudents(currentUser);
   const hasAlreadyVoted = election.voterIds?.includes(currentUser?.id || currentUser?.uid || '');
 
   const handleConfirmVote = async () => {
@@ -114,6 +128,24 @@ export const ElectionVoteModal: React.FC<ElectionVoteModalProps> = ({
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Merci pour votre participation citoyenne à la vie de l'établissement !
             </p>
+          </div>
+        ) : isParent && !parentHasChildren ? (
+          <div className="p-12 text-center space-y-4 my-auto">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto">
+              <Info size={32} />
+            </div>
+            <h3 className="text-xl font-black text-gray-900 dark:text-white">
+              Participation non autorisée
+            </h3>
+            <p className="text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 p-4 rounded-2xl max-w-md mx-auto border border-red-200 dark:border-red-900 leading-relaxed">
+              Vous ne pouvez pas participer à cette élection, car aucun élève n'est actuellement associé à votre compte.
+            </p>
+            <button 
+              onClick={onClose}
+              className="mt-4 px-6 py-2.5 bg-gray-900 dark:bg-gray-700 text-white font-bold text-xs rounded-xl hover:bg-gray-800 transition-colors"
+            >
+              Fermer
+            </button>
           </div>
         ) : hasAlreadyVoted ? (
           <div className="p-12 text-center space-y-4 my-auto">

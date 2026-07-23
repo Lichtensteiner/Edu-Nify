@@ -65,7 +65,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
     {
       title: t('schooling_category'),
       items: [
-        { id: 'digital_binder', labelKey: 'digital_binder', icon: FolderClosed, roles: ['admin', 'enseignant', 'élève'] },
+        { id: 'digital_binder', labelKey: 'digital_binder', icon: FolderClosed, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'classroom', labelKey: 'classroom', icon: GraduationCap, roles: ['admin', 'enseignant', 'élève'] },
         { id: 'homework', labelKey: 'homework', icon: BookOpen, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'grades', labelKey: 'grades', icon: FileText, roles: ['admin', 'enseignant', 'élève', 'parent'] },
@@ -74,7 +74,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
         { id: 'ai_assistant', labelKey: 'ai_assistant', icon: Sparkles, roles: ['enseignant', 'admin'] },
         { id: 'classes', labelKey: 'classes', icon: BookOpen, roles: ['admin', 'enseignant'] },
         { id: 'planning', labelKey: 'planning', icon: CalendarIcon, roles: ['admin', 'enseignant', 'élève', 'parent'] },
-        { id: 'calendar', labelKey: 'calendar', icon: CalendarIcon, roles: ['admin', 'enseignant', 'personnel administratif'] },
+        { id: 'calendar', labelKey: 'calendar', icon: CalendarIcon, roles: ['admin', 'enseignant', 'personnel administratif', 'parent'] },
         { id: 'attendance', labelKey: 'attendance', icon: CalendarCheck, roles: ['admin', 'enseignant', 'personnel administratif'] },
         { id: 'reports', labelKey: 'reports', icon: FileText, roles: ['admin', 'enseignant', 'personnel administratif'] },
       ]
@@ -204,7 +204,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 // Direct filtered items for Parents to keep it simple and focused
                 if (role === 'parent') {
                   const allowedParentTabs = [
-                    'dashboard', 'newsfeed', 'messaging', 'profile', 'homework', 'grades', 'planning', 'houses', 'clubs', 'leaderboard', 'library', 'canteen', 'surveys', 'finance', 'settings'
+                    'dashboard', 'newsfeed', 'messaging', 'profile', 'digital_binder', 'calendar', 'planning', 'homework', 'grades', 'houses', 'clubs', 'leaderboard', 'library', 'canteen', 'surveys', 'finance', 'settings'
                   ];
                   if (!allowedParentTabs.includes(item.id)) return false;
                 }

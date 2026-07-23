@@ -10,11 +10,42 @@ import {
   ShieldCheck, 
   Eye, 
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Activity,
+  AlertCircle
 } from 'lucide-react';
 import { Election, Candidate } from '../../types/surveyElection';
 import { subscribeToCandidates } from '../../services/surveyElectionService';
 import { isUserInTargetAudience } from '../../utils/rbacPermissions';
+
+function hasAssociatedStudents(user: any): boolean {
+  if (!user) return false;
+  if (user.role !== 'parent') return true;
+  if (Array.isArray(user.children_ids) && user.children_ids.length > 0) return true;
+  if (Array.isArray(user.children) && user.children.length > 0) return true;
+  if (Array.isArray(user.enfants) && user.enfants.length > 0) return true;
+  if (Array.isArray(user.studentIds) && user.studentIds.length > 0) return true;
+  if (user.childId || user.studentId || user.student_id || user.assignedStudentId) return true;
+  if (user.classe || user.student_email || user.email_eleve) return true;
+  return false;
+}
+
+const getRemainingTimeText = (endDateStr?: string) => {
+  if (!endDateStr) return 'Pas de date limite';
+  const now = new Date().getTime();
+  const end = new Date(endDateStr).getTime();
+  const diff = end - now;
+
+  if (diff <= 0) return 'Clôturé';
+
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(hours / 24);
+
+  if (days > 0) return `Reste ${days} jour${days > 1 ? 's' : ''}`;
+  if (hours > 0) return `Ferme dans ${hours}h`;
+  const minutes = Math.floor(diff / (1000 * 60));
+  return `Ferme dans ${minutes} min`;
+};
 
 interface StudentElectionViewProps {
   elections: Election[];
@@ -32,7 +63,7 @@ export const StudentElectionView: React.FC<StudentElectionViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCandidateProgram, setSelectedCandidateProgram] = useState<Candidate | null>(null);
 
-  // Filter elections targeted to student
+  // Filter elections targeted to user role (student, parent, staff)
   const studentElections = elections.filter(e => {
     const isTargeted = isUserInTargetAudience(currentUser, e.targetAudience);
     const matchesSearch = e.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -68,6 +99,7 @@ export const StudentElectionView: React.FC<StudentElectionViewProps> = ({
               election={election}
               hasVoted={hasVoted}
               isClosed={isClosed}
+              currentUser={currentUser}
               onOpenVote={() => onOpenVote(election)}
               onOpenResults={() => onOpenResults(election)}
               onViewProgram={(candidate) => setSelectedCandidateProgram(candidate)}
@@ -82,7 +114,7 @@ export const StudentElectionView: React.FC<StudentElectionViewProps> = ({
               Aucune élection disponible
             </h3>
             <p className="text-xs text-gray-400 max-w-sm mx-auto">
-              Il n'y a pas d'élection en cours pour votre classe ou établissement en ce moment.
+              Il n'y a pas d'élection en cours pour votre profil ou votre établissement en ce moment.
             </p>
           </div>
         )}
@@ -140,6 +172,7 @@ interface ElectionCardItemProps {
   election: Election;
   hasVoted: boolean;
   isClosed: boolean;
+  currentUser: any;
   onOpenVote: () => void;
   onOpenResults: () => void;
   onViewProgram: (candidate: Candidate) => void;
@@ -149,6 +182,7 @@ const ElectionCardItem: React.FC<ElectionCardItemProps> = ({
   election,
   hasVoted,
   isClosed,
+  currentUser,
   onOpenVote,
   onOpenResults,
   onViewProgram
@@ -159,6 +193,12 @@ const ElectionCardItem: React.FC<ElectionCardItemProps> = ({
     const unsub = subscribeToCandidates(election.id, (data) => setCandidates(data));
     return () => unsub();
   }, [election.id]);
+
+  const isParent = currentUser?.role === 'parent';
+  const parentHasChildren = hasAssociatedStudents(currentUser);
+  const totalVotesCount = election.totalVotes || election.voterIds?.length || 0;
+  const estimatedTargetCount = election.targetAudience?.estimatedVoters || 40;
+  const participationRate = Math.min(100, Math.round((totalVotesCount / Math.max(1, estimatedTargetCount)) * 100));
 
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-3xl border ${
@@ -202,12 +242,22 @@ const ElectionCardItem: React.FC<ElectionCardItemProps> = ({
             </div>
           ) : (
             !isClosed ? (
-              <button
-                onClick={onOpenVote}
-                className="px-6 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-2xl text-xs font-extrabold flex items-center gap-2 shadow-lg shadow-pink-100 dark:shadow-none hover:scale-105 transition-all"
-              >
-                <Vote size={18} /> Participer & Voter
-              </button>
+              isParent && !parentHasChildren ? (
+                <button
+                  disabled
+                  title="Aucun élève associé à votre compte"
+                  className="px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 rounded-2xl text-xs font-extrabold flex items-center gap-2 cursor-not-allowed border border-gray-200 dark:border-gray-600 opacity-80"
+                >
+                  <Vote size={18} /> Voter (Désactivé)
+                </button>
+              ) : (
+                <button
+                  onClick={onOpenVote}
+                  className="px-6 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-2xl text-xs font-extrabold flex items-center gap-2 shadow-lg shadow-pink-100 dark:shadow-none hover:scale-105 transition-all"
+                >
+                  <Vote size={18} /> Participer & Voter
+                </button>
+              )
             ) : null
           )}
 
@@ -219,6 +269,64 @@ const ElectionCardItem: React.FC<ElectionCardItemProps> = ({
               <Trophy size={16} /> Résultats
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Parent Warning Banner if no children attached */}
+      {isParent && !parentHasChildren && !hasVoted && (
+        <div className="p-3.5 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-2xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-center gap-2.5">
+          <AlertCircle size={18} className="text-red-600 shrink-0" />
+          <span>Vous ne pouvez pas participer à cette élection, car aucun élève n'est actuellement associé à votre compte.</span>
+        </div>
+      )}
+
+      {/* Real-time Participation Statistics Bar */}
+      <div className="p-4 bg-indigo-50/70 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="p-2.5 bg-indigo-600 text-white rounded-xl shrink-0">
+            <Activity size={18} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-extrabold text-indigo-950 dark:text-indigo-200 uppercase tracking-wide">
+                Participation en temps réel
+              </span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                isClosed 
+                  ? 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300' 
+                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 animate-pulse'
+              }`}>
+                {isClosed ? '🔒 Clôturé' : '🟢 Ouvert'}
+              </span>
+            </div>
+            <p className="text-[11px] text-indigo-700 dark:text-indigo-300 font-medium mt-0.5">
+              {getRemainingTimeText(election.endDate)}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
+          <div className="text-center">
+            <p className="text-[10px] uppercase tracking-wider text-indigo-500 dark:text-indigo-400 font-bold">
+              Total Suffrages
+            </p>
+            <p className="text-sm font-black text-gray-900 dark:text-white">
+              {totalVotesCount} vote{totalVotesCount > 1 ? 's' : ''}
+            </p>
+          </div>
+
+          <div className="w-36 space-y-1">
+            <div className="flex justify-between text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+              <span>Taux</span>
+              <span>{participationRate}%</span>
+            </div>
+            <div className="w-full bg-indigo-200 dark:bg-indigo-900 h-2 rounded-full overflow-hidden">
+              <div 
+                className="bg-indigo-600 h-full rounded-full transition-all duration-500" 
+                style={{ width: `${participationRate}%` }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
