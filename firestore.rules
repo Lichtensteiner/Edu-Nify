@@ -259,16 +259,15 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'views', 'viewers', 'commentsCount']) ||
-        isAdmin() || 
         request.auth.uid == resource.data.authorId
       );
-      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.authorId);
+      allow delete: if (isAuthenticated() && request.auth.uid == resource.data.authorId);
       
       // Comments subcollection
       match /comments/{commentId} {
         allow read: if isAuthenticated();
         allow create: if isAuthenticated();
-        allow update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.authorId);
+        allow update, delete: if (isAuthenticated() && request.auth.uid == resource.data.authorId);
       }
     }
 
@@ -278,10 +277,9 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'views', 'viewers', 'commentsCount']) ||
-        isAdmin() || 
         request.auth.uid == resource.data.authorId
       );
-      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.authorId);
+      allow delete: if (isAuthenticated() && request.auth.uid == resource.data.authorId);
       
       // Comments subcollection
       match /comments/{commentId} {

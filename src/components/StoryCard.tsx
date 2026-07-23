@@ -193,7 +193,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
             <MoreVertical size={20} />
           </button>
           <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 hidden group-hover:block z-20 overflow-hidden">
-            {(isAuthor || isAdmin) && (
+            {isAuthor && (
               <button
                 onClick={() => setIsEditing(true)}
                 className="w-full text-left px-4 py-2.5 text-xs sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 font-medium"
@@ -209,7 +209,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
               <EyeOff size={16} /> Masquer pour moi
             </button>
 
-            {!isStudent && (isAuthor || isAdmin) && (
+            {isAuthor && (
               <button
                 onClick={() => setShowSoftDeleteModal(true)}
                 className="w-full text-left px-4 py-2.5 text-xs sm:text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 flex items-center gap-2 font-medium border-t border-gray-100 dark:border-gray-700"
@@ -218,7 +218,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
               </button>
             )}
 
-            {isAdmin && (
+            {isAuthor && (
               <button
                 onClick={() => setShowPermanentDeleteModal(true)}
                 className="w-full text-left px-4 py-2.5 text-xs sm:text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center gap-2 font-medium"
