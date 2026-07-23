@@ -10,6 +10,7 @@ import {
   Image as ImageIcon 
 } from 'lucide-react';
 import { Election, ElectionType, TargetAudience } from '../../types/surveyElection';
+import { TargetAudienceSelector } from './TargetAudienceSelector';
 
 interface ElectionFormModalProps {
   isOpen: boolean;
@@ -44,7 +45,9 @@ export const ElectionFormModal: React.FC<ElectionFormModalProps> = ({
   const [startTime, setStartTime] = useState(initialData?.startTime || '08:00');
   const [endTime, setEndTime] = useState(initialData?.endTime || '18:00');
 
-  const [targetScope, setTargetScope] = useState<TargetAudience['scope']>(initialData?.targetAudience?.scope || 'all');
+  const [targetAudience, setTargetAudience] = useState<TargetAudience>(
+    initialData?.targetAudience || { scope: 'all', schoolId: currentUser?.etablissement || 'all' }
+  );
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
@@ -66,7 +69,12 @@ export const ElectionFormModal: React.FC<ElectionFormModalProps> = ({
         endTime,
         status: 'active',
         targetAudience: {
-          scope: targetScope
+          schoolId: currentUser?.etablissement || 'all',
+          scope: targetAudience.scope || 'all',
+          roles: targetAudience.roles || [],
+          levels: targetAudience.levels || [],
+          classes: targetAudience.classes || [],
+          users: targetAudience.users || targetAudience.userIds || []
         }
       };
 
@@ -122,34 +130,24 @@ export const ElectionFormModal: React.FC<ElectionFormModalProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Type de Scrutin</label>
-                <select 
-                  value={type}
-                  onChange={(e) => setType(e.target.value as ElectionType)}
-                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm font-medium focus:ring-2 focus:ring-pink-500 outline-none dark:text-white"
-                >
-                  {ELECTION_TYPES.map(t => (
-                    <option key={t.type} value={t.type}>{t.icon} {t.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Public Habilité</label>
-                <select 
-                  value={targetScope}
-                  onChange={(e) => setTargetScope(e.target.value as any)}
-                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm font-medium focus:ring-2 focus:ring-pink-500 outline-none dark:text-white"
-                >
-                  <option value="all">Toute l'école</option>
-                  <option value="classes">Élèves d'une classe</option>
-                  <option value="teachers">Enseignants</option>
-                  <option value="parents">Parents d'élèves</option>
-                </select>
-              </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Type de Scrutin</label>
+              <select 
+                value={type}
+                onChange={(e) => setType(e.target.value as ElectionType)}
+                className="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm font-medium focus:ring-2 focus:ring-pink-500 outline-none dark:text-white"
+              >
+                {ELECTION_TYPES.map(t => (
+                  <option key={t.type} value={t.type}>{t.icon} {t.label}</option>
+                ))}
+              </select>
             </div>
+
+            <TargetAudienceSelector 
+              value={targetAudience}
+              onChange={(val) => setTargetAudience(val)}
+              userSchoolId={currentUser?.etablissement || 'all'}
+            />
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Description / Modalités du vote</label>

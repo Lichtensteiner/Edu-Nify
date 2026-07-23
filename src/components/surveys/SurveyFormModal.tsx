@@ -15,6 +15,7 @@ import {
   FileText
 } from 'lucide-react';
 import { Question, QuestionType, Survey, TargetAudience, SurveySettings } from '../../types/surveyElection';
+import { TargetAudienceSelector } from './TargetAudienceSelector';
 
 interface SurveyFormModalProps {
   isOpen: boolean;
@@ -51,8 +52,9 @@ export const SurveyFormModal: React.FC<SurveyFormModalProps> = ({
   const [endDate, setEndDate] = useState(initialData?.endDate || '');
 
   // Target audience
-  const [targetScope, setTargetScope] = useState<TargetAudience['scope']>(initialData?.targetAudience?.scope || 'all');
-  const [selectedClasses, setSelectedClasses] = useState<string[]>(initialData?.targetAudience?.classes || []);
+  const [targetAudience, setTargetAudience] = useState<TargetAudience>(
+    initialData?.targetAudience || { scope: 'all', schoolId: currentUser?.etablissement || 'all' }
+  );
 
   // Settings
   const [isAnonymous, setIsAnonymous] = useState(initialData?.settings?.isAnonymous ?? true);
@@ -142,8 +144,12 @@ export const SurveyFormModal: React.FC<SurveyFormModalProps> = ({
         authorName: `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() || 'Administrateur',
         authorRole: currentUser?.role || 'admin',
         targetAudience: {
-          scope: targetScope,
-          classes: selectedClasses
+          schoolId: currentUser?.etablissement || 'all',
+          scope: targetAudience.scope || 'all',
+          roles: targetAudience.roles || [],
+          levels: targetAudience.levels || [],
+          classes: targetAudience.classes || [],
+          users: targetAudience.users || targetAudience.userIds || []
         },
         startDate,
         endDate: endDate || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -279,33 +285,12 @@ export const SurveyFormModal: React.FC<SurveyFormModalProps> = ({
 
           {/* Target Audience & Settings */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-            {/* Audience */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <Users size={16} className="text-indigo-600" />
-                Public Cible
-              </h3>
-
-              <div className="space-y-2">
-                {[
-                  { id: 'all', label: 'Toute l\'école' },
-                  { id: 'teachers', label: 'Tous les enseignants' },
-                  { id: 'parents', label: 'Tous les parents' },
-                  { id: 'staff', label: 'Personnel administratif' }
-                ].map((opt) => (
-                  <label key={opt.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900/60 rounded-2xl cursor-pointer hover:bg-indigo-50/50 transition-colors">
-                    <input 
-                      type="radio" 
-                      name="targetScope" 
-                      value={opt.id}
-                      checked={targetScope === opt.id}
-                      onChange={() => setTargetScope(opt.id as any)}
-                      className="text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200">{opt.label}</span>
-                  </label>
-                ))}
-              </div>
+            <div className="md:col-span-2">
+              <TargetAudienceSelector 
+                value={targetAudience}
+                onChange={(val) => setTargetAudience(val)}
+                userSchoolId={currentUser?.etablissement || 'all'}
+              />
             </div>
 
             {/* Confidentiality & Settings */}
