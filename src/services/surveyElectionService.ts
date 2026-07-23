@@ -25,20 +25,32 @@ import {
 } from '../types/surveyElection';
 import { recordAuditLog } from './auditService';
 import { moveToTrash } from './trashService';
+import { createSurveyNotification, createActivityLog } from './surveyNotificationService';
 
 // ==========================================
 // SURVEYS SERVICES
 // ==========================================
 
-export const subscribeToSurveys = (callback: (surveys: Survey[]) => void) => {
+export const subscribeToSurveys = (
+  callback: (surveys: Survey[]) => void, 
+  userSchoolId?: string
+) => {
   const q = query(collection(db, 'surveys'));
   return onSnapshot(q, (snapshot) => {
-    const surveys = snapshot.docs.map(doc => ({
+    let surveys = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as Survey[];
-    // Filter out soft deleted
-    callback(surveys.filter(s => !s.softDeleted));
+
+    // Filter soft deleted
+    surveys = surveys.filter(s => !s.softDeleted);
+
+    // Filter by school if defined and not super admin
+    if (userSchoolId && userSchoolId !== 'all') {
+      surveys = surveys.filter(s => !s.targetAudience?.scope || s.targetAudience?.scope === 'all' || (s as any).schoolId === userSchoolId || !(s as any).schoolId);
+    }
+
+    callback(surveys);
   }, (err) => {
     console.error("Error subscribing to surveys:", err);
   });
@@ -59,8 +71,10 @@ export const subscribeToSurveyResponses = (surveyId: string, callback: (response
 
 export const createSurvey = async (surveyData: Omit<Survey, 'id' | 'createdAt' | 'votersCount' | 'voterIds'>, currentUser: any) => {
   try {
+    const userSchoolId = currentUser?.etablissement || 'all';
     const payload = {
       ...surveyData,
+      schoolId: userSchoolId,
       votersCount: 0,
       voterIds: [],
       status: surveyData.status || 'active',
@@ -72,13 +86,25 @@ export const createSurvey = async (surveyData: Omit<Survey, 'id' | 'createdAt' |
     const docRef = await addDoc(collection(db, 'surveys'), payload);
 
     if (currentUser) {
+      const userName = `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim() || 'Utilisateur';
       await recordAuditLog({
         userId: currentUser.id || currentUser.uid,
-        userName: `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim() || 'Utilisateur',
+        userName,
         userRole: currentUser.role || 'admin',
         action: 'Création de sondage',
         details: `Titre: ${surveyData.title}, Catégorie: ${surveyData.category}`,
         category: 'management'
+      });
+
+      await createActivityLog(surveyData.title, 'survey', 'Création de sondage', userName, userSchoolId);
+
+      // Dispatch notification
+      await createSurveyNotification({
+        title: 'Nouveau sondage disponible',
+        message: `Le sondage "${surveyData.title}" est maintenant ouvert à votre participation.`,
+        type: 'survey',
+        targetSchoolId: userSchoolId,
+        linkId: docRef.id
       });
     }
 
@@ -224,14 +250,24 @@ export const submitSurveyResponse = async (
 // ELECTIONS SERVICES
 // ==========================================
 
-export const subscribeToElections = (callback: (elections: Election[]) => void) => {
+export const subscribeToElections = (
+  callback: (elections: Election[]) => void, 
+  userSchoolId?: string
+) => {
   const q = query(collection(db, 'elections'));
   return onSnapshot(q, (snapshot) => {
-    const elections = snapshot.docs.map(doc => ({
+    let elections = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as Election[];
-    callback(elections.filter(e => !e.softDeleted));
+
+    elections = elections.filter(e => !e.softDeleted);
+
+    if (userSchoolId && userSchoolId !== 'all') {
+      elections = elections.filter(e => !e.targetAudience?.scope || e.targetAudience?.scope === 'all' || (e as any).schoolId === userSchoolId || !(e as any).schoolId);
+    }
+
+    callback(elections);
   }, (err) => {
     console.error("Error subscribing to elections:", err);
   });
@@ -252,8 +288,10 @@ export const subscribeToCandidates = (electionId: string, callback: (candidates:
 
 export const createElection = async (electionData: Omit<Election, 'id' | 'createdAt' | 'totalVotes' | 'voterIds'>, currentUser: any) => {
   try {
+    const userSchoolId = currentUser?.etablissement || 'all';
     const payload = {
       ...electionData,
+      schoolId: userSchoolId,
       totalVotes: 0,
       voterIds: [],
       status: electionData.status || 'active',
@@ -265,13 +303,24 @@ export const createElection = async (electionData: Omit<Election, 'id' | 'create
     const docRef = await addDoc(collection(db, 'elections'), payload);
 
     if (currentUser) {
+      const userName = `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim();
       await recordAuditLog({
         userId: currentUser.id || currentUser.uid,
-        userName: `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim(),
+        userName,
         userRole: currentUser.role,
         action: 'Création d\'élection',
         details: `Titre: ${electionData.title}, Type: ${electionData.type}`,
         category: 'management'
+      });
+
+      await createActivityLog(electionData.title, 'election', 'Création d\'élection', userName, userSchoolId);
+
+      await createSurveyNotification({
+        title: 'Nouvelle élection organisée',
+        message: `Le scrutin "${electionData.title}" est maintenant ouvert aux votes.`,
+        type: 'election',
+        targetSchoolId: userSchoolId,
+        linkId: docRef.id
       });
     }
 
@@ -429,3 +478,4 @@ export const archiveElection = async (id: string, currentUser: any) => {
     throw error;
   }
 };
+

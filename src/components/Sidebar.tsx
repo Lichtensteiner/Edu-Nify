@@ -88,7 +88,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
         { id: 'leaderboard', labelKey: 'leaderboard', icon: Trophy, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'library', labelKey: 'library', icon: Library, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'canteen', labelKey: 'canteen', icon: Utensils, roles: ['admin', 'enseignant', 'élève', 'parent', 'cuisinier', 'personnel administratif'] },
-        { id: 'surveys', labelKey: 'surveys', icon: Vote, roles: ['admin', 'enseignant', 'élève', 'parent'] },
+        { id: 'surveys', labelKey: 'surveys', icon: Vote, roles: ['admin', 'enseignant', 'élève', 'parent', 'personnel administratif', 'cuisinier'] },
       ]
     },
     {
@@ -211,7 +211,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 // Direct filtered items for Students (élève)
                 if (role === 'élève') {
                   const allowedStudentTabs = [
-                    'student_dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 'grades', 'homework', 'student_card', 'canteen', 'planning', 'settings'
+                    'student_dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 'grades', 'homework', 'student_card', 'canteen', 'planning', 'surveys', 'settings'
                   ];
                   if (!allowedStudentTabs.includes(item.id)) return false;
                 }
