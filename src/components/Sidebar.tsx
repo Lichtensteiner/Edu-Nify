@@ -65,14 +65,14 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
     {
       title: t('schooling_category'),
       items: [
-        { id: 'digital_binder', labelKey: 'digital_binder', icon: FolderClosed, roles: ['admin', 'enseignant'] },
+        { id: 'digital_binder', labelKey: 'digital_binder', icon: FolderClosed, roles: ['admin', 'enseignant', 'élève'] },
         { id: 'classroom', labelKey: 'classroom', icon: GraduationCap, roles: ['admin', 'enseignant', 'élève'] },
         { id: 'homework', labelKey: 'homework', icon: BookOpen, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'grades', labelKey: 'grades', icon: FileText, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'ludo_ai_plus', labelKey: 'ludo_ai_plus', icon: Sparkles, roles: ['élève', 'admin'] },
         { id: 'courses_subjects', labelKey: 'courses_subjects', icon: BookOpen, roles: ['enseignant', 'admin', 'élève', 'personnel administratif', 'cuisinier'] },
         { id: 'ai_assistant', labelKey: 'ai_assistant', icon: Sparkles, roles: ['enseignant', 'admin'] },
-        { id: 'classes', labelKey: 'classes', icon: BookOpen, roles: ['admin'] },
+        { id: 'classes', labelKey: 'classes', icon: BookOpen, roles: ['admin', 'enseignant'] },
         { id: 'planning', labelKey: 'planning', icon: CalendarIcon, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'calendar', labelKey: 'calendar', icon: CalendarIcon, roles: ['admin', 'enseignant', 'personnel administratif'] },
         { id: 'attendance', labelKey: 'attendance', icon: CalendarCheck, roles: ['admin', 'enseignant', 'personnel administratif'] },
@@ -193,9 +193,10 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 // Direct filtered items for Teachers (enseignant) to avoid cognitive overload
                 if (role === 'enseignant') {
                   const allowedTeacherTabs = [
-                    'dashboard', 'messaging', 'profile', 
-                    'digital_binder', 'homework', 'grades', 
-                    'planning', 'attendance', 'ai_assistant', 'settings', 'trash'
+                    'dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 
+                    'digital_binder', 'classroom', 'classes', 'courses_subjects', 
+                    'homework', 'grades', 'planning', 'attendance', 'surveys', 
+                    'ai_assistant', 'settings', 'trash'
                   ];
                   if (!allowedTeacherTabs.includes(item.id)) return false;
                 }
@@ -211,7 +212,9 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 // Direct filtered items for Students (élève)
                 if (role === 'élève') {
                   const allowedStudentTabs = [
-                    'student_dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 'grades', 'homework', 'student_card', 'canteen', 'planning', 'surveys', 'settings'
+                    'student_dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 
+                    'digital_binder', 'classroom', 'grades', 'homework', 'student_card', 
+                    'canteen', 'planning', 'surveys', 'settings'
                   ];
                   if (!allowedStudentTabs.includes(item.id)) return false;
                 }
