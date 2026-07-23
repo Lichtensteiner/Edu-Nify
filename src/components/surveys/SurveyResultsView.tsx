@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 import { Survey, SurveyResponse } from '../../types/surveyElection';
 import { subscribeToSurveyResponses } from '../../services/surveyElectionService';
+import { VotersListModal } from './VotersListModal';
 
 interface SurveyResultsViewProps {
   survey: Survey;
@@ -37,6 +38,7 @@ const COLORS = ['#6366f1', '#a855f7', '#ec4899', '#10b981', '#f59e0b', '#3b82f6'
 export const SurveyResultsView: React.FC<SurveyResultsViewProps> = ({ survey, onBack }) => {
   const [responses, setResponses] = useState<SurveyResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showVotersModal, setShowVotersModal] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToSurveyResponses(survey.id, (data) => {
@@ -107,7 +109,13 @@ export const SurveyResultsView: React.FC<SurveyResultsViewProps> = ({ survey, on
         </div>
 
         {/* Export Buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button 
+            onClick={() => setShowVotersModal(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shadow-md"
+          >
+            <Users size={16} /> Liste des Votants ({totalParticipants})
+          </button>
           <button 
             onClick={handleExportCSV}
             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shadow-md"
@@ -122,6 +130,17 @@ export const SurveyResultsView: React.FC<SurveyResultsViewProps> = ({ survey, on
           </button>
         </div>
       </div>
+
+      <VotersListModal 
+        isOpen={showVotersModal}
+        onClose={() => setShowVotersModal(false)}
+        item={{
+          id: survey.id,
+          title: survey.title,
+          type: 'survey',
+          isAnonymous: survey.settings?.isAnonymous
+        }}
+      />
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">

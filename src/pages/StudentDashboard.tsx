@@ -41,6 +41,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import LiveClock from '../components/LiveClock';
 import NewUserAnnouncement from '../components/NewUserAnnouncement';
+import { StudentCertificateModule } from '../components/StudentCertificateModule';
 
 interface Notification {
   id: string;
@@ -63,7 +64,7 @@ export default function StudentDashboard({ onNavigate }: { onNavigate?: (tab: st
   const [house, setHouse] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('all');
-  const [activeTab, setActiveTab] = useState<'overview' | 'grades' | 'attendance' | 'homework' | 'courses'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'grades' | 'attendance' | 'homework' | 'courses' | 'certificates'>('overview');
 
   const toggleHomeworkCompletion = async (hwId: string, isDone: boolean) => {
     if (!currentUser) return;
@@ -373,7 +374,8 @@ export default function StudentDashboard({ onNavigate }: { onNavigate?: (tab: st
             { id: 'grades', name: "Notes & Évaluations", icon: Award },
             { id: 'attendance', name: "Mes Présences", icon: Clock },
             { id: 'homework', name: "Cahier de textes", icon: ListTodo },
-            { id: 'courses', name: "Mes Cours & Supports", icon: BookOpen }
+            { id: 'courses', name: "Mes Cours & Supports", icon: BookOpen },
+            { id: 'certificates', name: "Certificat de Scolarité", icon: FileText }
           ].map(tab => (
             <button
               key={tab.id}
@@ -1030,6 +1032,10 @@ export default function StudentDashboard({ onNavigate }: { onNavigate?: (tab: st
                   </div>
                 )}
               </div>
+            )}
+
+            {activeTab === 'certificates' && (
+              <StudentCertificateModule />
             )}
           </motion.div>
         </AnimatePresence>

@@ -240,6 +240,16 @@ export const submitSurveyResponse = async (
       votersCount: increment(1),
       updatedAt: serverTimestamp()
     });
+
+    // Send real-time notification to organizers/admins
+    const displayName = survey.settings.isAnonymous ? 'Un participant anonyme' : userName;
+    await createSurveyNotification({
+      title: `Nouveau vote enregistré : ${survey.title}`,
+      message: `${displayName} (${userRole}) vient de voter dans le sondage "${survey.title}". Consultez la liste des participants.`,
+      type: 'survey',
+      targetSchoolId: (survey as any).schoolId || 'all',
+      linkId: survey.id
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'surveyResponses');
     throw error;
@@ -390,6 +400,19 @@ export const deleteCandidate = async (id: string) => {
   }
 };
 
+export const subscribeToElectionVotes = (electionId: string, callback: (votes: any[]) => void) => {
+  const q = query(collection(db, 'votes'), where('electionId', '==', electionId));
+  return onSnapshot(q, (snapshot) => {
+    const votes = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    callback(votes);
+  }, (err) => {
+    console.error("Error subscribing to election votes:", err);
+  });
+};
+
 export const castElectionVote = async (
   election: Election,
   candidateId: string,
@@ -402,12 +425,15 @@ export const castElectionVote = async (
       throw new Error("Vous avez déjà voté pour cette élection.");
     }
 
+    const voterName = `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() || currentUser?.email || 'Électeur';
+
     // 1. Record vote in votes collection
     await addDoc(collection(db, 'votes'), {
       electionId: election.id,
       candidateId,
       voterId,
-      voterRole,
+      voterName,
+      voterRole: voterRole || currentUser?.role || 'Électeur',
       votedAt: serverTimestamp(),
       isEncrypted: true
     });
@@ -426,10 +452,19 @@ export const castElectionVote = async (
       updatedAt: serverTimestamp()
     });
 
+    // Send real-time notification to organizers/admins
+    await createSurveyNotification({
+      title: `Nouveau suffrage exprimé : ${election.title}`,
+      message: `${voterName} (${voterRole || currentUser?.role || 'Électeur'}) vient d'exprimer son vote dans l'élection "${election.title}".`,
+      type: 'election',
+      targetSchoolId: (election as any).schoolId || 'all',
+      linkId: election.id
+    });
+
     if (currentUser) {
       await recordAuditLog({
         userId: currentUser.id || currentUser.uid,
-        userName: `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim(),
+        userName: voterName,
         userRole: currentUser.role,
         action: 'Vote élection',
         details: `Élection: ${election.title}`,

@@ -24,6 +24,7 @@ import {
 } from 'recharts';
 import { Candidate, Election } from '../../types/surveyElection';
 import { subscribeToCandidates } from '../../services/surveyElectionService';
+import { VotersListModal } from './VotersListModal';
 
 interface ElectionResultsViewProps {
   election: Election;
@@ -36,6 +37,7 @@ export const ElectionResultsView: React.FC<ElectionResultsViewProps> = ({
 }) => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showVotersModal, setShowVotersModal] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToCandidates(election.id, (data) => {
@@ -106,7 +108,13 @@ export const ElectionResultsView: React.FC<ElectionResultsViewProps> = ({
         </div>
 
         {/* Export Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button 
+            onClick={() => setShowVotersModal(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shadow-md"
+          >
+            <Users size={16} /> Liste des Votants ({totalVotes})
+          </button>
           <button 
             onClick={handleExportCSV}
             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shadow-md"
@@ -121,6 +129,16 @@ export const ElectionResultsView: React.FC<ElectionResultsViewProps> = ({
           </button>
         </div>
       </div>
+
+      <VotersListModal 
+        isOpen={showVotersModal}
+        onClose={() => setShowVotersModal(false)}
+        item={{
+          id: election.id,
+          title: election.title,
+          type: 'election'
+        }}
+      />
 
       {/* Winner Banner Announcement if votes exist */}
       {winner && (

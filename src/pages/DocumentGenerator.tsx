@@ -24,6 +24,7 @@ import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
 import { Palette, Sparkles, AlertCircle, RefreshCw, Layers } from 'lucide-react';
 import { EDU_NIFY_LOGO_BASE64 } from '../lib/logo';
+import { AdminCertificateRequestsModal } from '../components/AdminCertificateRequestsModal';
 
 interface Student {
   id: string;
@@ -1131,6 +1132,8 @@ Génère une réponse sous forme d'un objet JSON pur et valide (sans aucun blabl
   };
 
 
+  const [showCertModal, setShowCertModal] = useState(false);
+
   const filteredStudents = students.filter(s => {
     const matchesSearch = `${s.prenom} ${s.nom}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           s.matricule?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -1152,7 +1155,19 @@ Génère une réponse sous forme d'un objet JSON pur et valide (sans aucun blabl
             Générez des documents officiels (PDF) certifiés par l'établissement.
           </p>
         </div>
+
+        <button
+          onClick={() => setShowCertModal(true)}
+          className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-2xl text-xs font-black transition-all shadow-md shrink-0"
+        >
+          <FileCheck size={18} /> Demandes de Certificats (Validation Admin)
+        </button>
       </div>
+
+      <AdminCertificateRequestsModal
+        isOpen={showCertModal}
+        onClose={() => setShowCertModal(false)}
+      />
 
       {/* SELECTION ETABLISSEMENT & CONFIGURATION EXPERTE DE CHARTE GRAPHIQUE AVEC IA */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
