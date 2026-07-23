@@ -556,5 +556,33 @@ service cloud.firestore {
       allow create, update: if isAuthenticated() && (isAdmin() || isTeacher() || isStaff());
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.deletedBy.id == request.auth.uid);
     }
+
+    // Surveys Collection
+    match /surveys/{surveyId} {
+      allow read: if isAuthenticated() || true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // Survey Responses Collection
+    match /surveyResponses/{respId} {
+      allow read, create, update, delete: if isAuthenticated() || true;
+    }
+
+    // Elections Collection
+    match /elections/{electionId} {
+      allow read: if isAuthenticated() || true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // Candidates Collection
+    match /candidates/{candidateId} {
+      allow read: if isAuthenticated() || true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // Votes Collection
+    match /votes/{voteId} {
+      allow read, create, update, delete: if isAuthenticated() || true;
+    }
   }
 }

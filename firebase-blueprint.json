@@ -606,6 +606,76 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["etablissement", "staffId", "typeDoc", "title"]
+    },
+    "surveys": {
+      "title": "Surveys",
+      "description": "School surveys, consultations and polls",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "active", "closed", "archived"] },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "votersCount": { "type": "number" },
+        "voterIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "status", "authorId"]
+    },
+    "surveyResponses": {
+      "title": "Survey Responses",
+      "description": "User responses submitted for surveys",
+      "type": "object",
+      "properties": {
+        "surveyId": { "type": "string" },
+        "userId": { "type": "string" },
+        "answers": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["surveyId", "userId"]
+    },
+    "elections": {
+      "title": "Elections",
+      "description": "Official school votes and elections",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "active", "closed", "archived"] },
+        "totalVotes": { "type": "number" },
+        "voterIds": { "type": "array", "items": { "type": "string" } },
+        "authorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "type", "status", "authorId"]
+    },
+    "candidates": {
+      "title": "Election Candidates",
+      "description": "Candidates running for an election",
+      "type": "object",
+      "properties": {
+        "electionId": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "program": { "type": "string" },
+        "votesCount": { "type": "number" }
+      },
+      "required": ["electionId", "firstName", "lastName", "program"]
+    },
+    "votes": {
+      "title": "Election Votes",
+      "description": "Secret ballot votes cast in an election",
+      "type": "object",
+      "properties": {
+        "electionId": { "type": "string" },
+        "candidateId": { "type": "string" },
+        "voterId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["electionId", "candidateId", "voterId"]
     }
   },
   "firestore": {
@@ -650,6 +720,11 @@
     "/rh_bulletin_config/{id}": { "schema": "rh_bulletin_config", "description": "School Bulletin Config" },
     "/finance_settings/{settingId}": { "schema": "finance_settings", "description": "Starting/initial balances and financial parameters per establishment" },
     "/rh_generated_documents/{id}": { "schema": "rh_generated_documents", "description": "Archived official and AI-generated documents for staff" },
-    "/trash/{itemId}": { "schema": "trash", "description": "Soft deleted items stored temporarily for 30 days" }
+    "/trash/{itemId}": { "schema": "trash", "description": "Soft deleted items stored temporarily for 30 days" },
+    "/surveys/{surveyId}": { "schema": "surveys", "description": "School surveys and consultations" },
+    "/surveyResponses/{respId}": { "schema": "surveyResponses", "description": "Survey response entries" },
+    "/elections/{electionId}": { "schema": "elections", "description": "School elections and votes" },
+    "/candidates/{candidateId}": { "schema": "candidates", "description": "Election candidates" },
+    "/votes/{voteId}": { "schema": "votes", "description": "Secret ballot vote entries" }
   }
 }
