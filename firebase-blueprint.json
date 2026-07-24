@@ -676,6 +676,91 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["electionId", "candidateId", "voterId"]
+    },
+    "parents": {
+      "title": "Parent Account Profiles",
+      "description": "Comprehensive profile for legal guardians and parents",
+      "type": "object",
+      "properties": {
+        "nom": { "type": "string" },
+        "prenom": { "type": "string" },
+        "sexe": { "type": "string", "enum": ["M", "F"] },
+        "dateNaissance": { "type": "string" },
+        "nationalite": { "type": "string" },
+        "profession": { "type": "string" },
+        "telephone": { "type": "string" },
+        "telephoneSecondaire": { "type": "string" },
+        "email": { "type": "string" },
+        "adresse": { "type": "string" },
+        "ville": { "type": "string" },
+        "quartier": { "type": "string" },
+        "photo": { "type": "string" },
+        "statut": { "type": "string", "enum": ["actif", "inactif"] },
+        "schoolId": { "type": "string" },
+        "etablissement": { "type": "string" },
+        "childrenIds": { "type": "array", "items": { "type": "string" } },
+        "lastLogin": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "deleted": { "type": "boolean" }
+      },
+      "required": ["nom", "prenom", "email", "telephone", "statut"]
+    },
+    "parentStudents": {
+      "title": "Parent Student Association",
+      "description": "Mapping relationship between parent and student",
+      "type": "object",
+      "properties": {
+        "parentId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "relationship": { "type": "string", "enum": ["Père", "Mère", "Tuteur légal", "Grand-parent", "Oncle", "Tante", "Autre responsable"] },
+        "schoolId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["parentId", "studentId", "relationship"]
+    },
+    "parentMessages": {
+      "title": "Parent Direct Messages",
+      "description": "Messages exchanged between parents and school",
+      "type": "object",
+      "properties": {
+        "parentId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "content": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["parentId", "senderId", "content"]
+    },
+    "parentNotifications": {
+      "title": "Parent Targeted Notifications",
+      "description": "Notifications pushed to parent accounts",
+      "type": "object",
+      "properties": {
+        "targetType": { "type": "string", "enum": ["single", "multiple", "all"] },
+        "parentIds": { "type": "array", "items": { "type": "string" } },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "sentBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message"]
+    },
+    "parentActivities": {
+      "title": "Parent Activity Logs",
+      "description": "Audit trail log of parent administration events",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string" },
+        "parentId": { "type": "string" },
+        "parentName": { "type": "string" },
+        "details": { "type": "string" },
+        "performedBy": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["action", "performedBy"]
     }
   },
   "firestore": {
@@ -725,6 +810,11 @@
     "/surveyResponses/{respId}": { "schema": "surveyResponses", "description": "Survey response entries" },
     "/elections/{electionId}": { "schema": "elections", "description": "School elections and votes" },
     "/candidates/{candidateId}": { "schema": "candidates", "description": "Election candidates" },
-    "/votes/{voteId}": { "schema": "votes", "description": "Secret ballot vote entries" }
+    "/votes/{voteId}": { "schema": "votes", "description": "Secret ballot vote entries" },
+    "/parents/{parentId}": { "schema": "parents", "description": "Parent profiles and accounts" },
+    "/parentStudents/{relId}": { "schema": "parentStudents", "description": "Bi-directional relationships between parents and students" },
+    "/parentMessages/{msgId}": { "schema": "parentMessages", "description": "Direct communication logs between parents and school" },
+    "/parentNotifications/{notifId}": { "schema": "parentNotifications", "description": "Targeted notifications sent to parents" },
+    "/parentActivities/{actId}": { "schema": "parentActivities", "description": "Audit trail log of parent management events" }
   }
 }

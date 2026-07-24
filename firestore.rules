@@ -584,5 +584,33 @@ service cloud.firestore {
     match /votes/{voteId} {
       allow read, create, update, delete: if isAuthenticated() || true;
     }
+
+    // Parents Collections
+    match /parents/{parentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isStaff();
+    }
+
+    match /parentStudents/{relId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isStaff();
+    }
+
+    match /parentMessages/{msgId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    match /parentNotifications/{notifId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isStaff();
+    }
+
+    match /parentActivities/{actId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
   }
 }

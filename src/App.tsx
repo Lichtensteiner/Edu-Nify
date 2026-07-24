@@ -61,6 +61,7 @@ import Surveys from "./pages/Surveys";
 import TeacherPlanning from "./pages/TeacherPlanning";
 import TermsAndConditions from "./pages/TermsAndConditions";
 import Users from "./pages/Users";
+import Parents from "./pages/Parents";
 import DossiersAgents from "./pages/DossiersAgents";
 import TechSheet from "./pages/TechSheet";
 import { Trash } from "./pages/Trash";
@@ -270,6 +271,8 @@ function AppContent() {
         return <Establishments />;
       case "users":
         return <Users />;
+      case "parents":
+        return <Parents />;
       case "staff":
         return <Staff />;
       case "responsibility_zones":

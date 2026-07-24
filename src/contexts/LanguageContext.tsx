@@ -21,6 +21,7 @@ const translations: Translations = {
   'canteen': { fr: 'Cantine', en: 'Canteen', es: 'Cantina', zh: '食堂', ja: '食堂' },
   'reports': { fr: 'Rapports', en: 'Reports', es: 'Informes', zh: '报告', ja: 'レポート' },
   'users': { fr: 'Utilisateurs', en: 'Users', es: 'Usuarios', zh: '用户', ja: 'ユーザー' },
+  'parents': { fr: 'Parents', en: 'Parents', es: 'Padres', zh: '家长', ja: '保護者' },
   'attendance': { fr: 'Présence', en: 'Attendance', es: 'Asistencia', zh: '出勤', ja: '出席' },
   'kiosk': { fr: 'Borne interactive', en: 'Interactive Kiosk', es: 'Quiosco interactivo', zh: '互动终端', ja: 'インタラクティブキオスク' },
   'recent_connections': { fr: 'Activités récentes', en: 'Recent Connections', es: 'Conexiones recientes', zh: '最近连接', ja: '最近の接続' },
