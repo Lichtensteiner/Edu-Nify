@@ -48,21 +48,13 @@ export const ParentsDashboardKPIs: React.FC<Props> = ({ parents, students }) => 
   parents.forEach(p => {
     const classes = p.classes || [];
     classes.forEach(c => {
-      classCounts[c] = (classCounts[c] || 0) + 1;
+      if (c && c !== 'Non assigné') {
+        classCounts[c] = (classCounts[c] || 0) + 1;
+      }
     });
   });
 
-  const parentsByClassData = Object.keys(classCounts).length > 0 
-    ? Object.entries(classCounts).map(([classe, count]) => ({ classe, count }))
-    : [
-        { classe: '6ème A', count: 18 },
-        { classe: '5ème B', count: 24 },
-        { classe: '4ème C', count: 20 },
-        { classe: '3ème A', count: 15 },
-        { classe: '2nd C', count: 22 },
-        { classe: '1ère D', count: 19 },
-        { classe: 'Tle C', count: 14 },
-      ];
+  const parentsByClassData = Object.entries(classCounts).map(([classe, count]) => ({ classe, count }));
 
   // Chart Data: Parents par niveau (Maternelle, Primaire, Collège, Lycée)
   const levelCounts: { [key: string]: number } = {
@@ -75,27 +67,30 @@ export const ParentsDashboardKPIs: React.FC<Props> = ({ parents, students }) => 
   parents.forEach(p => {
     const classes = p.classes || [];
     classes.forEach(c => {
+      if (!c) return;
       const lower = c.toLowerCase();
-      if (lower.includes('ps') || lower.includes('ms') || lower.includes('gs') || lower.includes('mat')) levelCounts['Maternelle']++;
-      else if (lower.includes('cp') || lower.includes('ce') || lower.includes('cm') || lower.includes('prim')) levelCounts['Primaire']++;
-      else if (lower.includes('6') || lower.includes('5') || lower.includes('4') || lower.includes('3')) levelCounts['Collège']++;
+      if (lower.includes('ps') || lower.includes('ms') || lower.includes('gs') || lower.includes('mat') || lower.includes('maternelle')) levelCounts['Maternelle']++;
+      else if (lower.includes('cp') || lower.includes('ce') || lower.includes('cm') || lower.includes('prim') || lower.includes('primaire') || lower.includes('sil')) levelCounts['Primaire']++;
+      else if (lower.includes('6') || lower.includes('5') || lower.includes('4') || lower.includes('3') || lower.includes('col') || lower.includes('collège') || lower.includes('college')) levelCounts['Collège']++;
       else levelCounts['Lycée']++;
     });
   });
 
   const parentsByLevelData = [
-    { name: 'Maternelle', value: levelCounts['Maternelle'] || 12 },
-    { name: 'Primaire', value: levelCounts['Primaire'] || 35 },
-    { name: 'Collège', value: levelCounts['Collège'] || 48 },
-    { name: 'Lycée', value: levelCounts['Lycée'] || 28 },
+    { name: 'Maternelle', value: levelCounts['Maternelle'] },
+    { name: 'Primaire', value: levelCounts['Primaire'] },
+    { name: 'Collège', value: levelCounts['Collège'] },
+    { name: 'Lycée', value: levelCounts['Lycée'] },
   ];
+
+  const totalByLevel = parentsByLevelData.reduce((acc, curr) => acc + curr.value, 0);
 
   const LEVEL_COLORS = ['#ec4899', '#3b82f6', '#6366f1', '#10b981'];
 
   // Status Distribution Data
   const statusData = [
-    { name: 'Comptes Actifs', value: activeParents || 85, color: '#10b981' },
-    { name: 'Comptes Inactifs', value: inactiveParents || 15, color: '#f59e0b' }
+    { name: 'Comptes Actifs', value: activeParents, color: '#10b981' },
+    { name: 'Comptes Inactifs', value: inactiveParents, color: '#f59e0b' }
   ];
 
   // Evolution Data
@@ -197,18 +192,26 @@ export const ParentsDashboardKPIs: React.FC<Props> = ({ parents, students }) => 
             </div>
           </div>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={parentsByClassData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                <XAxis dataKey="classe" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                  cursor={{ fill: 'rgba(243, 244, 246, 0.6)' }}
-                />
-                <Bar dataKey="count" name="Parents" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={24} />
-              </BarChart>
-            </ResponsiveContainer>
+            {parentsByClassData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={parentsByClassData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                  <XAxis dataKey="classe" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                    cursor={{ fill: 'rgba(243, 244, 246, 0.6)' }}
+                  />
+                  <Bar dataKey="count" name="Parents" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={24} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-gray-400 text-xs bg-gray-50/50 rounded-xl border border-dashed border-gray-200 p-4">
+                <Users className="w-8 h-8 text-gray-300 mb-2" />
+                <p className="font-semibold text-gray-600">Aucune classe associée</p>
+                <p className="text-[11px] text-gray-400 text-center mt-1">Associez des élèves avec leurs classes aux parents de cet établissement pour voir la répartition par classe.</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -219,22 +222,30 @@ export const ParentsDashboardKPIs: React.FC<Props> = ({ parents, students }) => 
             <p className="text-xs text-gray-500">Par cycle d'enseignement</p>
           </div>
           <div className="h-52 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={parentsByLevelData}
-                  innerRadius={50}
-                  outerRadius={75}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {parentsByLevelData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={LEVEL_COLORS[index % LEVEL_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            {totalByLevel > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={parentsByLevelData}
+                    innerRadius={50}
+                    outerRadius={75}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {parentsByLevelData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={LEVEL_COLORS[index % LEVEL_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full flex flex-col items-center justify-center text-gray-400 text-xs bg-gray-50/50 rounded-xl border border-dashed border-gray-200 p-4">
+                <GraduationCap className="w-8 h-8 text-gray-300 mb-2" />
+                <p className="font-semibold text-gray-600">Aucune donnée par niveau</p>
+                <p className="text-[11px] text-gray-400 text-center mt-1">Aucun niveau enregistré pour les parents de cet établissement.</p>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-2 mt-2">
             {parentsByLevelData.map((item, idx) => (

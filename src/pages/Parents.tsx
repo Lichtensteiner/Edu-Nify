@@ -61,73 +61,176 @@ export const Parents: React.FC = () => {
 
   const schoolId = currentEstablishment?.id || 'EDU-001';
 
+  // Helper: check if a record belongs to current establishment
+  const matchesEstablishment = (item: any) => {
+    if (!currentEstablishment) return true;
+    const estId = currentEstablishment.id;
+    const estNom = (currentEstablishment.nom || '').toLowerCase().trim();
+    const estCode = (currentEstablishment.code || '').toLowerCase().trim();
+
+    const itemEst = item.schoolId || item.etablissement || item.etablissementId;
+    if (!itemEst) {
+      return estId === 'EDU-001';
+    }
+
+    const itemEstStr = String(itemEst).toLowerCase().trim();
+    return (
+      itemEstStr === estId.toLowerCase() ||
+      (estNom && itemEstStr === estNom) ||
+      (estCode && itemEstStr === estCode)
+    );
+  };
+
   // 1. Fetch Students
   useEffect(() => {
     if (!db) return;
     const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
       const studentList = snapshot.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .filter((u: any) => u.role === 'élève' || u.role === 'eleve' || u.role === 'student');
+        .filter((u: any) => {
+          const r = (u.role || '').toLowerCase();
+          const isStudentRole = r === 'élève' || r === 'eleve' || r === 'student';
+          return isStudentRole && matchesEstablishment(u);
+        });
       setStudents(studentList);
     });
     return () => unsub();
-  }, []);
+  }, [currentEstablishment?.id, currentEstablishment?.nom]);
 
   // 2. Fetch Parent Student Relations
   useEffect(() => {
     if (!db) return;
     const unsub = onSnapshot(collection(db, 'parentStudents'), (snapshot) => {
       const rels = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as ParentStudentRelation[];
-      setRelations(rels);
+      const filtered = rels.filter(r => matchesEstablishment(r));
+      setRelations(filtered);
     });
     return () => unsub();
-  }, []);
+  }, [currentEstablishment?.id, currentEstablishment?.nom]);
 
-  // 3. Fetch Parents (isolated by schoolId)
+  // 3. Fetch Parents (Realtime from both 'parents' collection AND 'users' with role parent/tuteur)
   useEffect(() => {
     if (!db) return;
     setLoading(true);
-    const unsub = onSnapshot(collection(db, 'parents'), (snapshot) => {
-      const parentData = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Parent[];
-      
-      // Filter by establishment
-      const filtered = parentData.filter(p => !p.schoolId || p.schoolId === schoolId);
-      setParents(filtered);
-      setLoading(false);
+
+    const unsubParents = onSnapshot(collection(db, 'parents'), (parentsSnap) => {
+      const dedicatedParents = parentsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Parent[];
+
+      const unsubUsers = onSnapshot(collection(db, 'users'), (usersSnap) => {
+        const userParents = usersSnap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter((u: any) => {
+            const r = (u.role || '').toLowerCase();
+            return r === 'parent' || r === 'tuteur';
+          })
+          .map((u: any): Parent => ({
+            id: u.id,
+            nom: u.nom || u.lastName || '',
+            prenom: u.prenom || u.firstName || '',
+            sexe: u.sexe || u.gender || 'M',
+            dateNaissance: u.dateNaissance || '',
+            nationalite: u.nationalite || 'Gabonaise',
+            profession: u.profession || u.position || '',
+            telephone: u.telephone || u.contact || u.phone || '',
+            telephoneSecondaire: u.telephoneSecondaire || '',
+            email: u.email || '',
+            adresse: u.adresse || u.address || '',
+            ville: u.ville || 'Libreville',
+            quartier: u.quartier || '',
+            photo: u.photo || u.avatar || '',
+            statut: u.statut || u.status || 'actif',
+            schoolId: u.schoolId || u.etablissement || schoolId,
+            createdAt: u.createdAt || u.dateCreation || new Date().toISOString(),
+            deleted: u.deleted || u.archived || false,
+            childrenIds: u.children_ids || u.childrenIds || []
+          }));
+
+        const map = new Map<string, Parent>();
+
+        userParents.forEach(p => {
+          if (matchesEstablishment(p)) {
+            map.set(p.id, p);
+          }
+        });
+
+        dedicatedParents.forEach(p => {
+          if (matchesEstablishment(p)) {
+            map.set(p.id, p);
+          }
+        });
+
+        setParents(Array.from(map.values()));
+        setLoading(false);
+      });
+
+      return () => unsubUsers();
     }, (err) => {
-      console.warn("Using sample fallback parents if Firestore empty", err);
+      console.warn("Firestore error listening to parents", err);
       setLoading(false);
     });
 
-    return () => unsub();
-  }, [schoolId]);
+    return () => unsubParents();
+  }, [currentEstablishment?.id, currentEstablishment?.nom]);
 
   // 4. Fetch Activities Log
   useEffect(() => {
     if (!db) return;
     const unsub = onSnapshot(collection(db, 'parentActivities'), (snapshot) => {
       const actList = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as ParentActivity[];
-      setActivities(actList.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+      const filtered = actList
+        .filter(a => matchesEstablishment(a))
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setActivities(filtered);
     });
     return () => unsub();
-  }, []);
+  }, [currentEstablishment?.id, currentEstablishment?.nom]);
 
   // Enrich parents with their associated students and classes
   const enrichedParents = parents.map(p => {
     const parentRels = relations.filter(r => r.parentId === p.id);
-    const linkedStudents = parentRels.map(r => {
-      const st = students.find(s => s.id === r.studentId);
+
+    const linkedStudentIds = new Set<string>();
+    parentRels.forEach(r => linkedStudentIds.add(r.studentId));
+
+    if (Array.isArray(p.childrenIds)) {
+      p.childrenIds.forEach(id => linkedStudentIds.add(id));
+    }
+
+    students.forEach(s => {
+      if (s.parentId === p.id) linkedStudentIds.add(s.id);
+      if (p.telephone && (s.parentPhone === p.telephone || s.telephoneParent === p.telephone || s.tuteurPhone === p.telephone)) {
+        linkedStudentIds.add(s.id);
+      }
+      if (p.email && (s.parentEmail === p.email || s.emailParent === p.email)) {
+        linkedStudentIds.add(s.id);
+      }
+    });
+
+    const linkedStudents = Array.from(linkedStudentIds).map(stId => {
+      const st = students.find(s => s.id === stId);
+      const rel = parentRels.find(r => r.studentId === stId);
       return {
-        id: r.studentId,
+        id: stId,
         nom: st?.nom || 'Élève',
         prenom: st?.prenom || '',
         matricule: st?.matricule || 'N/A',
-        classe: st?.classe || st?.class_name || 'Non assigné',
-        relationship: r.relationship || 'Tuteur'
+        classe: st?.classe || st?.class_name || st?.niveau || 'Non assigné',
+        relationship: rel?.relationship || 'Tuteur'
       };
     });
 
-    const classesSet = new Set(linkedStudents.map(s => s.classe).filter(Boolean));
+    const classesSet = new Set<string>();
+    linkedStudents.forEach(s => {
+      if (s.classe && s.classe !== 'Non assigné') {
+        classesSet.add(s.classe);
+      }
+    });
+
+    if (Array.isArray(p.classes)) {
+      p.classes.forEach(c => { if (c && c !== 'Non assigné') classesSet.add(c); });
+    } else if ((p as any).classe && (p as any).classe !== 'Non assigné') {
+      classesSet.add((p as any).classe);
+    }
 
     return {
       ...p,
@@ -181,6 +284,7 @@ export const Parents: React.FC = () => {
         photo: parentData.photo || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`,
         statut: parentData.statut || 'actif',
         schoolId,
+        etablissement: schoolId,
         createdAt: new Date().toISOString(),
         deleted: false
       };
