@@ -761,9 +761,153 @@
         "timestamp": { "type": "string", "format": "date-time" }
       },
       "required": ["action", "performedBy"]
+    },
+    "accessLogs": {
+      "title": "Access Logs",
+      "description": "Realtime portal access control event logs",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string" },
+        "userId": { "type": "string" },
+        "nom": { "type": "string" },
+        "prenom": { "type": "string" },
+        "role": { "type": "string" },
+        "classId": { "type": "string" },
+        "classe": { "type": "string" },
+        "date": { "type": "string" },
+        "heure": { "type": "string" },
+        "gateId": { "type": "string" },
+        "pointAcces": { "type": "string" },
+        "supervisorId": { "type": "string" },
+        "surveillant": { "type": "string" },
+        "deviceId": { "type": "string" },
+        "status": { "type": "string" },
+        "eventType": { "type": "string", "enum": ["entrée", "sortie"] },
+        "confidence": { "type": "number" },
+        "photo": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "entryExitLogs": {
+      "title": "Entry/Exit Consolidated Logs",
+      "description": "Consolidated gate movement state history",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string" },
+        "classId": { "type": "string" },
+        "date": { "type": "string" },
+        "heureEntree": { "type": "string" },
+        "heureSortie": { "type": "string" },
+        "dureeMinutes": { "type": "number" },
+        "lastState": { "type": "string", "enum": ["présent", "sorti"] },
+        "gateId": { "type": "string" },
+        "supervisorId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "biometricProfiles": {
+      "title": "Biometric Profiles",
+      "description": "Facial landmark vector embeddings for AI recognition",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string" },
+        "nom": { "type": "string" },
+        "prenom": { "type": "string" },
+        "classe": { "type": "string" },
+        "embedding": { "type": "array", "items": { "type": "number" } },
+        "multiAngleEmbeddings": { "type": "array" },
+        "photo": { "type": "string" },
+        "enrolledAt": { "type": "string", "format": "date-time" },
+        "enrolledBy": { "type": "string" },
+        "anglesCaptured": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "unknownFaces": {
+      "title": "Unknown Faces Registry",
+      "description": "Temporary profile and biometric embedding for unrecognized faces",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string" },
+        "unknownCode": { "type": "string" },
+        "embedding": { "type": "array", "items": { "type": "number" } },
+        "photo": { "type": "string" },
+        "firstSeenAt": { "type": "string", "format": "date-time" },
+        "lastSeenAt": { "type": "string", "format": "date-time" },
+        "seenCount": { "type": "number" },
+        "gateId": { "type": "string" },
+        "deviceId": { "type": "string" },
+        "status": { "type": "string", "enum": ["unidentified", "merged"] },
+        "mergedToUserId": { "type": "string" },
+        "mergedAt": { "type": "string" },
+        "mergedBy": { "type": "string" }
+      }
+    },
+    "attendanceRecords": {
+      "title": "Classroom Attendance Records",
+      "description": "Course and classroom specific attendance logs validated by teachers",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "subject": { "type": "string" },
+        "course": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["Présent", "Retard", "Absent"] },
+        "gateEntryTime": { "type": "string" },
+        "gateStatus": { "type": "string" },
+        "comment": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "attendanceNotifications": {
+      "title": "Access & Attendance Notifications",
+      "description": "Targeted push notifications to parents and admins regarding student arrivals, exits and absences",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string" },
+        "userId": { "type": "string" },
+        "parentId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "read": { "type": "boolean" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "attendanceStatistics": {
+      "title": "Access Statistics Aggregates",
+      "description": "Daily and periodic access control statistics per establishment",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string" },
+        "date": { "type": "string" },
+        "totalStudents": { "type": "number" },
+        "presentCount": { "type": "number" },
+        "absentCount": { "type": "number" },
+        "lateCount": { "type": "number" },
+        "avgArrivalTime": { "type": "string" },
+        "avgDepartureTime": { "type": "string" },
+        "avgStayMinutes": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "firestore": {
+    "/accessLogs/{logId}": { "schema": "accessLogs", "description": "Gate access scan logs" },
+    "/entryExitLogs/{logId}": { "schema": "entryExitLogs", "description": "Consolidated entry exit logs" },
+    "/biometricProfiles/{profileId}": { "schema": "biometricProfiles", "description": "Enrolled biometric facial profiles" },
+    "/unknownFaces/{faceId}": { "schema": "unknownFaces", "description": "Unrecognized facial profiles" },
+    "/attendanceRecords/{recordId}": { "schema": "attendanceRecords", "description": "Classroom attendance records" },
+    "/attendanceNotifications/{notifId}": { "schema": "attendanceNotifications", "description": "Access control notifications" },
+    "/attendanceStatistics/{statId}": { "schema": "attendanceStatistics", "description": "Access statistics" },
     "/stories/{storyId}": { "schema": "stories", "description": "Class stories and announcements" },
     "/users/{userId}": { "schema": "users", "description": "User documents" },
     "/attendance/{attId}": { "schema": "attendance", "description": "Daily summaries" },

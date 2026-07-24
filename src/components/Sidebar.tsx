@@ -97,6 +97,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
         { id: 'establishments', labelKey: isSuperAdmin ? 'establishments' : 'my_establishment', icon: Building2, roles: ['admin'] },
         { id: 'users', labelKey: 'users', icon: Users, roles: ['admin'] },
         { id: 'parents', labelKey: 'parents', icon: Users, roles: ['admin'] },
+        { id: 'access_control', labelKey: 'access_control', icon: ScanFace, roles: ['admin', 'personnel administratif', 'surveillant'] },
         { id: 'staff', labelKey: 'admin_staff', icon: Scale, roles: ['admin', 'personnel administratif', 'enseignant'] },
         { id: 'responsibility_zones', labelKey: 'responsibility_zones', icon: ShieldCheck, roles: ['admin', 'personnel administratif', 'enseignant'] },
         { id: 'document_generator', labelKey: 'document_generator', icon: FileBadge, roles: ['admin', 'personnel administratif'] },
