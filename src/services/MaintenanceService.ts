@@ -31,13 +31,30 @@ export const runMaintenance = async (userRole: string) => {
     const ONE_DAY = 24 * 60 * 60 * 1000;
     const FIVE_DAYS = 5 * ONE_DAY;
 
-    // 1. Reset Connections (24h)
-    if (nowTime - lastConnectionsReset >= ONE_DAY) {
-      console.log("Maintenance: Resetting connections history (24h)...");
+    // 1. Reset / Clean Connections older than 24h
+    try {
       const connectionsSnap = await getDocs(collection(db, 'connections'));
-      const deletePromises = connectionsSnap.docs.map(d => deleteDoc(doc(db, 'connections', d.id)));
-      await Promise.all(deletePromises);
+      const expiredConnections = connectionsSnap.docs.filter(d => {
+        const connData = d.data();
+        const ts = connData.timestamp;
+        let tMs = 0;
+        if (typeof ts === 'string') tMs = new Date(ts).getTime();
+        else if (typeof ts === 'number') tMs = ts;
+        else if (ts?.toDate) tMs = ts.toDate().getTime();
+        else if (ts?.seconds) tMs = ts.seconds * 1000;
+        else tMs = new Date(ts).getTime() || 0;
+
+        return tMs === 0 || (nowTime - tMs) >= ONE_DAY;
+      });
+
+      if (expiredConnections.length > 0) {
+        console.log(`Maintenance: Purging ${expiredConnections.length} expired connections history (>24h)...`);
+        const deletePromises = expiredConnections.map(d => deleteDoc(doc(db, 'connections', d.id)));
+        await Promise.all(deletePromises);
+      }
       await updateDoc(maintenanceRef, { last_connections_reset: nowTime });
+    } catch (connErr) {
+      console.error("Error purging connections in maintenance:", connErr);
     }
 
     // 2. Reset Reports Archive (24h)

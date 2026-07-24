@@ -845,7 +845,7 @@ const translations: Translations = {
   'send': { fr: 'Envoyer', en: 'Send', es: 'Enviar', zh: '发送', ja: '送信' },
 
   // Connections
-  'recent_connections_desc': { fr: 'Historique des dernières connexions', en: 'History of last connections', es: 'Historial de las últimas conexiones', zh: '最近连接历史', ja: '最近の接続履歴' },
+  'recent_connections_desc': { fr: 'Historique des connexions et activités récentes (suppression automatique après 24h).', en: 'History of recent connections and activities (automatically deleted after 24h).', es: 'Historial de conexiones y actividades recientes (eliminación automática después de 24h).', zh: '最近连接和活动的历史记录（24小时后自动删除）。', ja: '最近の接続とアクティビティの履歴（24時間後に自動削除）。' },
   'datetime': { fr: 'Date & Heure', en: 'Date & Time', es: 'Fecha y Hora', zh: '日期和时间', ja: '日時' },
   'no_connections': { fr: 'Aucune connexion récente.', en: 'No recent connections.', es: 'No hay conexiones recientes.', zh: '没有最近的连接。', ja: '最近の接続はありません。' },
 

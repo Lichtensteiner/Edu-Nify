@@ -50,14 +50,25 @@ export default function UserActivityModal({ userId, onClose }: { userId: string,
           setUser({ id: userDoc.id, ...userDoc.data() } as UserDetails);
         }
 
-        // Fetch recent connections
+        // Fetch recent connections (last 24 hours)
         let connData: ConnectionLog[] = [];
+        const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const parseTs = (ts: any) => {
+          if (!ts) return 0;
+          if (typeof ts === 'string') return new Date(ts).getTime();
+          if (typeof ts === 'number') return ts;
+          if (ts.toDate) return ts.toDate().getTime();
+          if (ts.seconds) return ts.seconds * 1000;
+          return new Date(ts).getTime() || 0;
+        };
+
         try {
           const connQ = query(
             collection(db, 'connections'),
             where('user_id', '==', userId),
             orderBy('timestamp', 'desc'),
-            limit(10)
+            limit(20)
           );
           const connSnap = await getDocs(connQ);
           connData = connSnap.docs.map(d => ({ id: d.id, ...d.data() } as ConnectionLog));
@@ -71,12 +82,18 @@ export default function UserActivityModal({ userId, onClose }: { userId: string,
             );
             const connSnap = await getDocs(connQ);
             connData = connSnap.docs.map(d => ({ id: d.id, ...d.data() } as ConnectionLog));
-            connData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-            connData = connData.slice(0, 10);
+            connData.sort((a, b) => parseTs(b.timestamp) - parseTs(a.timestamp));
           } else {
             throw e;
           }
         }
+
+        // Filter out connections older than 24h
+        connData = connData.filter(conn => {
+          const tMs = parseTs(conn.timestamp);
+          return tMs > 0 && (now - tMs) <= TWENTY_FOUR_HOURS_MS;
+        }).slice(0, 10);
+
         setConnections(connData);
 
         // Fetch recent attendance
