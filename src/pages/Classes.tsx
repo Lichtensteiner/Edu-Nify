@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, Users, Clock, Edit2, Trash2, X, User, GraduationCap, ChevronRight } from 'lucide-react';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
+import { moveToTrash } from '../services/trashService';
 import { db, isFirebaseConfigured } from '../lib/firebase';
 import { useNotification } from '../contexts/NotificationContext';
 import ClassDetailsView from '../components/ClassDetailsView';
@@ -44,7 +45,7 @@ export default function Classes() {
     // Fetch classes filtered by active establishment ID
     const unsubscribeClasses = onSnapshot(collection(db, 'classes'), (snap) => {
       let classesData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      classesData = classesData.filter((c: any) => c.etablissement === activeEstId);
+      classesData = classesData.filter((c: any) => c.etablissement === activeEstId && !c.deleted);
       setClasses(classesData);
     });
 
@@ -215,24 +216,25 @@ export default function Classes() {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer cette classe ?")) {
+    if (window.confirm("Voulez-vous déplacer cette classe vers la corbeille ?")) {
       try {
         const classItem = classes.find(c => c.id === id);
-        await deleteDoc(doc(db, 'classes', id));
-
-        // SYNC: Remove class name from teacher classes profiles
-        if (classItem && classItem.nom) {
-          for (const t of teachers) {
-            if (t.classes && Array.isArray(t.classes) && t.classes.includes(classItem.nom)) {
-              const updated = t.classes.filter((c: string) => c !== classItem.nom);
-              await updateDoc(doc(db, 'users', t.id), {
-                classes: updated
-              });
-            }
-          }
+        if (classItem) {
+          await moveToTrash({
+            module: 'Classes',
+            entityType: 'classe',
+            entityId: id,
+            title: `Classe ${classItem.nom}`,
+            content: `Niveau: ${classItem.niveau || 'N/A'} - Effectif: ${classItem.elevesCount || 0}`,
+            originalCollection: 'classes',
+            deletedBy: currentUser?.uid || 'admin',
+            deletedByName: currentUser?.displayName || currentUser?.email || 'Administrateur',
+            schoolId: classItem.etablissementId || activeEstId,
+            originalData: classItem
+          });
         }
       } catch (error) {
-        console.error("Erreur lors de la suppression:", error);
+        console.error("Erreur lors de la suppression de la classe:", error);
       }
     }
   };

@@ -110,7 +110,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
         { id: 'dossiers_agents', labelKey: 'dossiers_agents', icon: FileText, roles: ['admin'] },
         { id: 'tech_sheet', labelKey: 'tech_sheet', icon: Cpu, roles: ['admin'] },
         { id: 'settings', labelKey: 'settings', icon: Settings, roles: ['admin', 'enseignant', 'personnel administratif', 'parent', 'cuisinier', 'élève'] },
-        { id: 'trash', labelKey: 'trash', icon: Trash2, roles: ['admin', 'enseignant', 'personnel administratif'] },
+        { id: 'trash', labelKey: 'trash', icon: Trash2, roles: ['admin'] },
       ]
     }
   ];
