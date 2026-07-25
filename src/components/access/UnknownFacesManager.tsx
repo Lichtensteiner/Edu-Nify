@@ -24,6 +24,8 @@ export default function UnknownFacesManager({ schoolId }: UnknownFacesManagerPro
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [isMerging, setIsMerging] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [faceToDelete, setFaceToDelete] = useState<{ id: string; code: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!schoolId) return;
@@ -178,16 +180,18 @@ export default function UnknownFacesManager({ schoolId }: UnknownFacesManagerPro
     }
   };
 
-  const handleDeleteFace = async (id: string, code: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm(`Voulez-vous vraiment supprimer la photo du visage non reconnu ${code} ?`)) return;
-
+  const handleConfirmDeleteFace = async () => {
+    if (!faceToDelete) return;
+    setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, 'unknownFaces', id));
-      setSuccessMessage(`Le profil visage ${code} a été supprimé avec succès.`);
+      await deleteDoc(doc(db, 'unknownFaces', faceToDelete.id));
+      setSuccessMessage(`Le profil visage ${faceToDelete.code} a été supprimé avec succès.`);
+      setFaceToDelete(null);
     } catch (err: any) {
       console.error("Erreur lors de la suppression de la photo:", err);
-      alert("Erreur lors de la suppression: " + err.message);
+      setSuccessMessage(`Erreur lors de la suppression: ${err.message || 'Problème de permissions'}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -311,8 +315,11 @@ export default function UnknownFacesManager({ schoolId }: UnknownFacesManagerPro
                   <Link2 size={14} /> Identifier
                 </button>
                 <button
-                  onClick={(e) => handleDeleteFace(u.id, u.unknownCode, e)}
-                  className="py-2.5 px-3 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 font-extrabold text-xs rounded-xl border border-red-200 dark:border-red-800 transition-all flex items-center justify-center gap-1.5 shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFaceToDelete({ id: u.id, code: u.unknownCode });
+                  }}
+                  className="py-2.5 px-3 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 font-extrabold text-xs rounded-xl border border-red-200 dark:border-red-800 transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
                   title="Supprimer cette photo"
                 >
                   <Trash2 size={14} /> Supprimer
@@ -442,6 +449,45 @@ export default function UnknownFacesManager({ schoolId }: UnknownFacesManagerPro
               >
                 {isMerging ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Link2 size={14} />}
                 {isMerging ? 'Fusion en cours...' : 'Confirmer & Fusionner l\'Historique'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {faceToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-700 p-6 space-y-4">
+            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+              <div className="p-3 bg-red-100 dark:bg-red-950/80 rounded-2xl">
+                <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-gray-900 dark:text-white">Confirmer la suppression</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Suppression de {faceToDelete.code}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-600 dark:text-gray-300">
+              Êtes-vous sûr de vouloir supprimer définitivement cette photo du registre des visages non reconnus ? Cette action est irréversible.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setFaceToDelete(null)}
+                disabled={isDeleting}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleConfirmDeleteFace}
+                disabled={isDeleting}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {isDeleting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 size={14} />}
+                {isDeleting ? 'Suppression en cours...' : 'Oui, Supprimer'}
               </button>
             </div>
           </div>
