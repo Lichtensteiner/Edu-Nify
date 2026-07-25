@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, ShieldAlert, Search, RefreshCw, CheckCircle2, Clock, MapPin, Camera, AlertTriangle, ArrowRight, UserPlus, Link2 } from 'lucide-react';
-import { collection, query, where, onSnapshot, getDocs, doc, updateDoc, setDoc, writeBatch } from 'firebase/firestore';
+import { UserCheck, ShieldAlert, Search, RefreshCw, CheckCircle2, Clock, MapPin, Camera, AlertTriangle, ArrowRight, UserPlus, Link2, Trash2 } from 'lucide-react';
+import { collection, query, where, onSnapshot, getDocs, doc, updateDoc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { UnknownFace } from '../../utils/faceBiometrics';
 import { useAuth } from '../../contexts/AuthContext';
@@ -8,6 +8,8 @@ import { useAuth } from '../../contexts/AuthContext';
 interface UnknownFacesManagerProps {
   schoolId: string;
 }
+
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 export default function UnknownFacesManager({ schoolId }: UnknownFacesManagerProps) {
   const { currentUser } = useAuth();
@@ -33,12 +35,40 @@ export default function UnknownFacesManager({ schoolId }: UnknownFacesManagerPro
       where('status', '==', 'unidentified')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as UnknownFace));
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const now = Date.now();
+      const validList: UnknownFace[] = [];
+      const expiredIds: string[] = [];
+
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        const face = { id: d.id, ...data } as UnknownFace;
+        const dateVal = face.lastSeenAt || face.firstSeenAt;
+        const timeMs = dateVal ? new Date(dateVal).getTime() : 0;
+
+        if (timeMs > 0 && (now - timeMs) <= TWENTY_FOUR_HOURS_MS) {
+          validList.push(face);
+        } else {
+          expiredIds.push(d.id);
+        }
+      });
+
       // Sort most recently seen first
-      list.sort((a, b) => new Date(b.lastSeenAt || b.firstSeenAt).getTime() - new Date(a.lastSeenAt || a.firstSeenAt).getTime());
-      setUnknowns(list);
+      validList.sort((a, b) => new Date(b.lastSeenAt || b.firstSeenAt).getTime() - new Date(a.lastSeenAt || a.firstSeenAt).getTime());
+      setUnknowns(validList);
       setLoading(false);
+
+      // Auto purge expired photos older than 24 hours
+      if (expiredIds.length > 0) {
+        console.log(`[UnknownFacesManager] Purging ${expiredIds.length} unrecognized face photos older than 24h...`);
+        for (const id of expiredIds) {
+          try {
+            await deleteDoc(doc(db, 'unknownFaces', id));
+          } catch (err) {
+            console.error("Error auto-deleting expired face photo:", err);
+          }
+        }
+      }
     }, (err) => {
       console.error("Error fetching unknown faces:", err);
       setLoading(false);
@@ -148,6 +178,19 @@ export default function UnknownFacesManager({ schoolId }: UnknownFacesManagerPro
     }
   };
 
+  const handleDeleteFace = async (id: string, code: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Voulez-vous vraiment supprimer la photo du visage non reconnu ${code} ?`)) return;
+
+    try {
+      await deleteDoc(doc(db, 'unknownFaces', id));
+      setSuccessMessage(`Le profil visage ${code} a été supprimé avec succès.`);
+    } catch (err: any) {
+      console.error("Erreur lors de la suppression de la photo:", err);
+      alert("Erreur lors de la suppression: " + err.message);
+    }
+  };
+
   const filteredUnknowns = unknowns.filter(u =>
     u.unknownCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (u.gateId && u.gateId.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -174,16 +217,25 @@ export default function UnknownFacesManager({ schoolId }: UnknownFacesManagerPro
           </div>
         </div>
 
-        <div className="bg-amber-900/40 border border-amber-400/30 px-5 py-2.5 rounded-2xl text-center">
-          <span className="text-2xl font-black text-amber-200">{unknowns.length}</span>
-          <span className="text-[11px] font-bold text-amber-100 block uppercase tracking-wider">Visages en Attente</span>
+        <div className="flex flex-col items-end gap-2">
+          <div className="bg-amber-900/40 border border-amber-400/30 px-5 py-2.5 rounded-2xl text-center w-full sm:w-auto">
+            <span className="text-2xl font-black text-amber-200">{unknowns.length}</span>
+            <span className="text-[11px] font-bold text-amber-100 block uppercase tracking-wider">Visages en Attente</span>
+          </div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-950/60 text-amber-200 border border-amber-500/30 rounded-xl text-[11px] font-semibold">
+            <Clock size={12} className="text-amber-400 shrink-0" />
+            <span>Purge automatique après 24h</span>
+          </div>
         </div>
       </div>
 
       {successMessage && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 text-sm text-emerald-700 dark:text-emerald-300 animate-fadeIn">
-          <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-500" />
-          <p className="font-semibold">{successMessage}</p>
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center justify-between gap-3 text-sm text-emerald-700 dark:text-emerald-300 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-500" />
+            <p className="font-semibold">{successMessage}</p>
+          </div>
+          <button onClick={() => setSuccessMessage(null)} className="text-emerald-500 hover:text-emerald-700 text-xs font-bold">✕</button>
         </div>
       )}
 
@@ -207,11 +259,11 @@ export default function UnknownFacesManager({ schoolId }: UnknownFacesManagerPro
           <RefreshCw className="w-8 h-8 animate-spin" />
         </div>
       ) : filteredUnknowns.length === 0 ? (
-        <div className="p-12 text-center bg-gray-50 dark:bg-gray-800/50 rounded-3xl border border-gray-100 dark:border-gray-700">
-          <UserCheck className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+        <div className="p-12 text-center bg-gray-50 dark:bg-gray-800/50 rounded-3xl border border-gray-100 dark:border-gray-700 flex flex-col items-center gap-2">
+          <UserCheck className="w-12 h-12 text-emerald-500 mx-auto" />
           <h3 className="font-extrabold text-base text-gray-900 dark:text-white">Aucun visage inconnu en attente</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Tous les visages détectés au portail sont identifiés ou déjà attribués aux élèves de l'établissement.
+          <p className="text-xs text-gray-500 dark:text-gray-400 max-w-md">
+            Tous les visages détectés au portail sont identifiés ou déjà attribués. Les photos non reconnues sont automatiquement purgées après 24 heures.
           </p>
         </div>
       ) : (
@@ -251,12 +303,19 @@ export default function UnknownFacesManager({ schoolId }: UnknownFacesManagerPro
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-gray-100 dark:border-gray-700 mt-4">
+              <div className="pt-4 border-t border-gray-100 dark:border-gray-700 mt-4 flex items-center gap-2">
                 <button
                   onClick={() => setSelectedUnknown(u)}
-                  className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-md hover:shadow-amber-500/20 transition-all flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-md hover:shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5"
                 >
-                  <Link2 size={14} /> Identifier & Associer à un Élève
+                  <Link2 size={14} /> Identifier
+                </button>
+                <button
+                  onClick={(e) => handleDeleteFace(u.id, u.unknownCode, e)}
+                  className="py-2.5 px-3 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 font-extrabold text-xs rounded-xl border border-red-200 dark:border-red-800 transition-all flex items-center justify-center gap-1.5 shrink-0"
+                  title="Supprimer cette photo"
+                >
+                  <Trash2 size={14} /> Supprimer
                 </button>
               </div>
             </div>
