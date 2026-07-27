@@ -5,7 +5,7 @@ import {
   Sparkles, ShieldCheck, User, Info, CheckCircle2, ChevronRight,
   BookOpen, HelpCircle, Code, Printer, FileText, Landmark,
   BarChart3, Users, Award, DollarSign, HeartPulse, Bus, Utensils,
-  Book, Lock, ArrowRight, ShieldAlert, GraduationCap, Check
+  Book, Lock, ArrowRight, ShieldAlert, GraduationCap, Check, Settings, Scale, Compass, CheckSquare
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { EDU_NIFY_LOGO_BASE64 } from '../lib/logo';
@@ -78,6 +78,7 @@ export default function TechSheet() {
           .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
           .grid-box { background: #ffffff; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 8.5pt; }
           .grid-box strong { color: #3730a3; display: block; margin-bottom: 3px; }
+          .feature-box { background-color: #e0e7ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px 16px; margin: 15px 0; color: #1e1b4b; }
         </style>
       </head>
       <body>
@@ -86,7 +87,7 @@ export default function TechSheet() {
         <!-- COVER PAGE -->
         <div class="cover">
           <div style="margin-bottom: 20px; text-align: center;">
-            <img src="${EDU_NIFY_LOGO_BASE64}" alt="Edu-Nify Logo" style="height: 110px; width: 110px; object-fit: contain; display: block; margin: 0 auto 10px auto;" />
+            <img src="${EDU_NIFY_LOGO_BASE64}" alt="Edu-Nify Logo" style="height: 120px; width: 120px; object-fit: contain; display: block; margin: 0 auto 15px auto;" />
           </div>
           <div class="cover-badge">DOCUMENT MAÎTRE DE STRATÉGIE GOUVERNEMENTALE & INSTITUTIONNELLE</div>
           <div class="cover-title">EDU-NIFY</div>
@@ -103,6 +104,7 @@ export default function TechSheet() {
 
           <div class="cover-meta">
             <strong>• Périmètre d'application :</strong> Maternelles, Primaires, Collèges, Lycées, Centres de Formation Professionnelle & Universités.<br>
+            <strong>• Moteur Dynamique :</strong> Agilité Multi-Systèmes (Gabonais, Français, Franco-Canadien, Anglophone, Américain, Sur-Mesure).<br>
             <strong>• Déploiement :</strong> Cloud Souverain National, Application Web, PWA & Applications Mobiles Offline-First.<br>
             <strong>• Sécurité & Conformité :</strong> Chiffrement AES-256, Conforme ISO 27001, RGPD & Directives de Cybersécurité d'État.<br>
             <strong>• Statut du Document :</strong> Document Officiel de Haute Gouvernance - Strictement Confidentiel.
@@ -117,12 +119,13 @@ export default function TechSheet() {
         <ol style="font-size: 11pt; line-height: 2.2;">
           <li><strong>CHAPITRE 1 : Présentation Générale du Projet Edu-Nify</strong> (Vision, Mission, Problématique, Impacts Social, Économique & Numérique)</li>
           <li><strong>CHAPITRE 2 : Architecture Générale du Système</strong> (Web, Mobile, Portails, API, Hébergement Cloud, Sécurité, IA & Offline)</li>
-          <li><strong>CHAPITRE 3 : Description Détaillée des 45 Modules Fonctionnels</strong> (Grille complète à 11 axes par module)</li>
-          <li><strong>CHAPITRE 4 : Description Exhaustive des 24 Rôles du Système</strong> (Matrice des responsabilités et permissions)</li>
-          <li><strong>CHAPITRE 5 : Tableaux de Bord & Pilotage Stratégique Decisionnel</strong> (Indicateurs nationaux, régionaux et locaux)</li>
-          <li><strong>CHAPITRE 6 : Technologies Recommandées & Invariants Techniques</strong> (Stack, Cybersécurité, ISO 27001, IA Gemini)</li>
-          <li><strong>CHAPITRE 7 : Bénéfices Stratégiques pour le Gouvernement</strong> (Gouvernance probante, Transparence financière, Anti-fraude)</li>
-          <li><strong>CHAPITRE 8 : Feuille de Route & Stratégie Nationale de Déploiement</strong> (Pilote, Généralisation, Formations, Support N3)</li>
+          <li><strong>CHAPITRE 3 : Moteur Intelligent de Gestion Multi-Systèmes Éducatifs</strong> (Moteur de règles Zero-Code, Agilité Internationale & Paramétrage Ministériel)</li>
+          <li><strong>CHAPITRE 4 : Description Détaillée des 45 Modules Fonctionnels</strong> (Grille complète à 11 axes par module)</li>
+          <li><strong>CHAPITRE 5 : Description Exhaustive des 24 Rôles du Système</strong> (Matrice des responsabilités et permissions)</li>
+          <li><strong>CHAPITRE 6 : Tableaux de Bord & Pilotage Stratégique Décisionnel</strong> (Indicateurs nationaux, régionaux et locaux)</li>
+          <li><strong>CHAPITRE 7 : Technologies Recommandées & Invariants Techniques</strong> (Stack, Cybersécurité, ISO 27001, IA Gemini)</li>
+          <li><strong>CHAPITRE 8 : Bénéfices Stratégiques pour le Gouvernement</strong> (Gouvernance probante, Transparence financière, Anti-fraude)</li>
+          <li><strong>CHAPITRE 9 : Feuille de Route & Stratégie Nationale de Déploiement</strong> (Pilote, Généralisation, Formations, Support N3)</li>
         </ol>
         <div class="doc-footer">Document Officiel de Gouvernance Edu-Nify</div>
 
@@ -196,8 +199,94 @@ export default function TechSheet() {
 
         <div class="page-break"></div>
 
-        <!-- CHAPITRE 3 -->
-        <h1>CHAPITRE 3 : DESCRIPTION DÉTAILLÉE DES MODULES FONCTIONNELS (EXTRAIT MAÎTRE)</h1>
+        <!-- CHAPITRE 3 : MOTEUR MULTI-SYSTÈMES -->
+        <h1>CHAPITRE 3 : MOTEUR INTELLIGENT DE GESTION MULTI-SYSTÈMES ÉDUCATIFS</h1>
+        
+        <h2>3.1 Architecture du Moteur Dynamique Zero-Code</h2>
+        <p>
+          Edu-Nify intègre en son cœur un <strong>moteur intelligent, universel et entièrement paramétrable</strong> capable de s'adapter automatiquement aux règles académiques, réglementaires et pédagogiques de n'importe quel système éducatif dans le monde, sans nécessiter la moindre modification du code source de l'application (Architecture Zero-Code).
+        </p>
+        <p>
+          Cette rupture technologique affranchit les ministères et les réseaux d'établissements des développements informatiques coûteux. En quelques clics sur la console d'administration, les règles de calcul, la structure des cycles et les chartes d'évaluation sont reconfigurées de manière transparente pour l'ensemble du système d'information.
+        </p>
+
+        <div class="feature-box">
+          <strong>Principe Fondamental de Flexibilité :</strong> Une seule instance d'Edu-Nify peut héberger simultanément plusieurs établissements appliquant des programmes d'études et des modèles d'évaluation totalement distincts (ex. un lycée appliquant le système national gabonais, une école partenaire française et un établissement international bilingue).
+        </div>
+
+        <h2>3.2 Fonctionnalités Détaillées & Composants du Moteur</h2>
+        <ul>
+          <li><strong>Prise en charge multi-systèmes centralisée :</strong> Capacité pour un Ministère de l'Éducation ou un administrateur national de gérer sur un même portail les normes nationales et les régimes dérogatoires (écoles privées internationales, lycées d'excellence).</li>
+          <li><strong>Sélection du système à la configuration :</strong> Chaque établissement ou entité régionale sélectionne son référentiel lors de la création de sa fiche d'État, activant automatiquement les règles métier adaptées.</li>
+          <li><strong>Gestion automatique des règles pédagogiques :</strong> Application instantanée des barèmes, types d'évaluations (contrôle continu, devoirs sur table, oraux, TP, examens d'État), coefficients et pondérations.</li>
+          <li><strong>Personnalisation intégrale de la chaîne académique :</strong>
+            <ul>
+              <li><strong>Cycles d'études & Niveaux :</strong> Maternelle, Primaire, Collège, Lycée General/Technique/Professionnel, Enseignement Supérieur (Système LMD).</li>
+              <li><strong>Classes & Filières :</strong> Séries scientifiques (C, D), littéraires (A1, A2), économiques (B), techniques (F1-F4, TI) ou sections bilingues.</li>
+              <li><strong>Matières & Unités d'Enseignement :</strong> Gestion des matières principales, sous-matières, options facultatives, travaux pratiques et groupes de compétences.</li>
+              <li><strong>Évaluations & Coefficients :</strong> Coefficients variables selon le trimestre, la série ou le niveau d'études.</li>
+              <li><strong>Bulletins & Mentions :</strong> Modèles visuels ajustés aux exigences ministérielles d'État.</li>
+            </ul>
+          </li>
+          <li><strong>Moteur de Règles (Rule Engine) :</strong> Applique en temps réel les contraintes d'assiduité minimale, les critères d'admissibilité aux examens et les préalables académiques.</li>
+          <li><strong>Moteur de Calcul Intelligent :</strong> Calcule automatiquement les moyennes trimestrielles et annuelles, les rangs, la répartition statistique (médiane, écart-type, moyenne de classe), les crédits ECTS/capitalisables, les Unités d'Enseignement (UE) et les prérequis de diplômes.</li>
+          <li><strong>Interface d'Administration "Zero-Code" :</strong> Console visuelle dédiée au Ministère pour créer, dupliquer, éditer ou ajuster un système éducatif à tout moment, en toute autonomie.</li>
+        </ul>
+
+        <h2>3.3 Systèmes Éducatifs Pris en Charge en Standard</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Système Éducatif</th>
+              <th>Spécificités Pédagogiques & Règles Intégrées</th>
+              <th>Périodisation & Évaluation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Système Gabonais (MEN)</strong></td>
+              <td>Pondération par coefficients de séries (A1, A2, B, C, D, TI). Bulletins nationaux certifiés avec QR Code d'État. Examens CEP, BEPC, Baccalauréat.</td>
+              <td>3 Trimestres / Notation sur 20 / Moyenne d'admission à 10.00/20.</td>
+            </tr>
+            <tr>
+              <td><strong>Système Français (AEFE / MEN)</strong></td>
+              <td>Contrôle continu, socle commun de connaissances et de compétences, Baccalauréat Général et Technologique avec spécialités et Grand Oral.</td>
+              <td>3 Trimestres ou 2 Semestres / Notation sur 20 / Compétences valider.</td>
+            </tr>
+            <tr>
+              <td><strong>Système Franco-Canadien / Québécois</strong></td>
+              <td>Évaluation par compétences transversales, système de crédits scolaires, cours à la carte, bulletins ministériels canadiens.</td>
+              <td>3 Étapes / Notation en pourcentage (%) / Paliers d'acquisition.</td>
+            </tr>
+            <tr>
+              <td><strong>Systèmes Internationaux (Anglophone, Belge, etc.)</strong></td>
+              <td>Prise en charge des cursus Cambridge (IGCSE, A-Levels), Système américain (GPA sur 4.0, High School Diploma), Système LMD universitaire.</td>
+              <td>Semestres / GPA, Crédits ECTS, Lettres (A+, A, B, C, D, F).</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>3.4 Automatisation Intégrale des Métiers Académiques</h2>
+        <p>Le moteur intelligent prend en charge de façon autonome et automatisée :</p>
+        <ul>
+          <li><strong>Règles de passage en classe supérieure :</strong> Application automatique des seuils de passage, calcul des rachats ou avis motivés du conseil de classe.</li>
+          <li><strong>Conditions de redoublement :</strong> Contrôle des plafonds d'âge et du nombre maximal de redoublements autorisés par cycle d'études.</li>
+          <li><strong>Conditions d'exclusion :</strong> Signalement automatique en cas de manquement grave, absentéisme chronique ou résultats sous les seuils d'exclusion.</li>
+          <li><strong>Calculs des moyennes :</strong> Prise en compte des coefficients par matière, neutralisation des épreuves dispensées et calcul des moyennes générales pondérées.</li>
+          <li><strong>Coefficients par matière & Périodes :</strong> Ajustement automatique selon la série, la spécialité ou la période scolaire (trimestres, semestres).</li>
+          <li><strong>Bulletins, Diplômes & Calendriers :</strong> Génération automatique des bulletins officiels certifiés, des relevés de notes et des attestations de réussite selon le calendrier officiel d'État.</li>
+          <li><strong>Statistiques Nationales Harmonisées :</strong> Restitution d'indicateurs ministériels comparables à l'échelle nationale, quelle que soit la diversité des systèmes sous-jacents.</li>
+        </ul>
+
+        <h2>3.5 Conclusion & Portée Stratégique Internationale</h2>
+        <p>
+          Grâce à son moteur intelligent de configuration multi-systèmes, Edu-Nify s'impose comme une <strong>plateforme universelle, internationale et pérenne</strong>. Elle garantit aux gouvernements et ministères une indépendance technologique totale, leur permettant de faire évoluer leurs réformes éducatives sans réinvestir dans le développement logiciel.
+        </p>
+
+        <div class="page-break"></div>
+
+        <!-- CHAPITRE 4 -->
+        <h1>CHAPITRE 4 : DESCRIPTION DÉTAILLÉE DES MODULES FONCTIONNELS (EXTRAIT MAÎTRE)</h1>
         <p>
           Chaque module d'Edu-Nify respecte une grille d'exigence à 11 axes garantissant son utilité pour l'Établissement, le Gouvernement, les Enseignants, les Parents et les Élèves.
         </p>
@@ -207,7 +296,7 @@ export default function TechSheet() {
           <p><strong>• Objectif :</strong> Numériser et automatiser le pointage quotidien des élèves et personnels.</p>
           <p><strong>• Fonctionnement :</strong> Saisie de l'appel par l'enseignant en 3 clics ou pointage autonome via badge RFID/Code PIN à l'entrée de l'école (Mode Kiosque). Alerte SMS automatique envoyée aux parents en cas d'absence non justifiée.</p>
           <div class="grid-2">
-            <div class="grid-box"><strong>Avantage Établissement</strong>Elimination de la triche aux absences, gain de 15 minutes par cours.</div>
+            <div class="grid-box"><strong>Avantage Établissement</strong>Élimination de la triche aux absences, gain de 15 minutes par cours.</div>
             <div class="grid-box"><strong>Avantage Gouvernement</strong>Statistiques nationales de fréquentation scolaire actualisées en temps réel.</div>
             <div class="grid-box"><strong>Données Enregistrées</strong>Heure exacte, type d'absence, motif, justificatif médical numérisé.</div>
             <div class="grid-box"><strong>Rapports Générés</strong>Registre d'assiduité mensuel officiel, bilan d'absentéisme d'établissement.</div>
@@ -240,8 +329,8 @@ export default function TechSheet() {
 
         <div class="page-break"></div>
 
-        <!-- CHAPITRE 4 -->
-        <h1>CHAPITRE 4 : MATRICE DES RÔLES ET DROITS D'ACCÈS DU SYSTÈME (24 RÔLES)</h1>
+        <!-- CHAPITRE 5 -->
+        <h1>CHAPITRE 5 : MATRICE DES RÔLES ET DROITS D'ACCÈS DU SYSTÈME (24 RÔLES)</h1>
         <table>
           <thead>
             <tr>
@@ -293,25 +382,25 @@ export default function TechSheet() {
 
         <div class="page-break"></div>
 
-        <!-- CHAPITRE 5, 6, 7, 8 -->
-        <h1>CHAPITRE 5 : TABLEAUX DE BORD DÉCISIONNELS</h1>
+        <!-- CHAPITRE 6, 7, 8, 9 -->
+        <h1>CHAPITRE 6 : TABLEAUX DE BORD DÉCISIONNELS</h1>
         <p>
           Edu-Nify propose 8 tableaux de bord spécialisés. Le **Tableau de Bord National Ministériel** affiche en temps réel la carte thermique de l'assiduité nationale, le taux de couverture des programmes, les ratios filles/garçons, et le niveau de collecte des frais par région.
         </p>
 
-        <h1>CHAPITRE 6 : TECHNOLOGIES & CYBERSÉCURITÉ SOUVERAINE</h1>
+        <h1>CHAPITRE 7 : TECHNOLOGIES & CYBERSÉCURITÉ SOUVERAINE</h1>
         <p>
           Le système répond aux normes militaires de sécurité : chiffrement TLS 1.3 de bout en bout, stockage partitionné par établissement, double authentification (2FA) pour les administrateurs, et journalisation d'imputabilité infalsifiable (Audit Log) retraçant chaque modification de note ou d'encaissement.
         </p>
 
-        <h1>CHAPITRE 7 : BÉNÉFICES STRATÉGIQUES POUR LE GOUVERNEMENT</h1>
+        <h1>CHAPITRE 8 : BÉNÉFICES STRATÉGIQUES POUR LE GOUVERNEMENT</h1>
         <ul>
           <li><strong>Bonne Gouvernance :</strong> Éradication des "élèves fantômes" et des enseignants fictifs sur la solde d'État.</li>
           <li><strong>Lutte contre la Corruption :</strong> Encaissement traçable sans manipulation d'espèces.</li>
           <li><strong>Souveraineté Numérique :</strong> Données nationales hébergées au sein des datacenters d'État.</li>
         </ul>
 
-        <h1>CHAPITRE 8 : FEUILLE DE ROUTE DE DÉPLOIEMENT NATIONAL</h1>
+        <h1>CHAPITRE 9 : FEUILLE DE ROUTE DE DÉPLOIEMENT NATIONAL</h1>
         <ol>
           <li><strong>Phase Pilote (Mois 1-3) :</strong> Déploiement dans 20 établissements témoins (capitale et régions).</li>
           <li><strong>Phase Régionale (Mois 4-8) :</strong> Extension aux chefs-lieux de provinces et formation des équipes relais.</li>
@@ -346,9 +435,16 @@ export default function TechSheet() {
         
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="space-y-3 max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-bold tracking-wider uppercase border border-indigo-400/30">
-              <Landmark className="w-4 h-4 text-indigo-400" />
-              Document de Haute Gouvernance d'État & Présentation Institutionnelle
+            <div className="flex items-center gap-3">
+              <img 
+                src={EDU_NIFY_LOGO_BASE64} 
+                alt="Edu-Nify Logo" 
+                className="w-14 h-14 object-contain bg-white/10 p-1.5 rounded-2xl border border-white/20 shadow-md shrink-0" 
+              />
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-bold tracking-wider uppercase border border-indigo-400/30">
+                <Landmark className="w-4 h-4 text-indigo-400" />
+                Document de Haute Gouvernance d'État & Présentation Institutionnelle
+              </div>
             </div>
             <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-tight">
               Livre Blanc & Master Plan Edu-Nify
@@ -374,12 +470,13 @@ export default function TechSheet() {
         {[
           { id: 1, name: "1. Présentation & Impacts", icon: Landmark },
           { id: 2, name: "2. Architecture Système", icon: Cpu },
-          { id: 3, name: "3. Modules (45 Modules)", icon: Layers },
-          { id: 4, name: "4. Rôles & Matrice (24 Rôles)", icon: Users },
-          { id: 5, name: "5. Tableaux de Bord", icon: BarChart3 },
-          { id: 6, name: "6. Technologies & Cybersécurité", icon: Lock },
-          { id: 7, name: "7. Bénéfices Gouvernement", icon: Award },
-          { id: 8, name: "8. Feuille de Route", icon: Globe },
+          { id: 3, name: "3. Moteur Multi-Systèmes", icon: Settings },
+          { id: 4, name: "4. Modules (45 Modules)", icon: Layers },
+          { id: 5, name: "5. Rôles & Matrice (24 Rôles)", icon: Users },
+          { id: 6, name: "6. Tableaux de Bord", icon: BarChart3 },
+          { id: 7, name: "7. Technologies & Cybersécurité", icon: Lock },
+          { id: 8, name: "8. Bénéfices Gouvernement", icon: Award },
+          { id: 9, name: "9. Feuille de Route", icon: Globe },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeChapter === tab.id;
@@ -493,12 +590,191 @@ export default function TechSheet() {
         </div>
       )}
 
-      {/* Chapter 3 View */}
+      {/* Chapter 3 View - Moteur Multi-Systèmes */}
       {activeChapter === 3 && (
+        <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 sm:p-8 border border-gray-200/80 dark:border-gray-700/80 shadow-2xs space-y-8">
+          <div className="border-b border-gray-100 dark:border-gray-700/80 pb-4 flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <span className="text-xs font-black text-indigo-600 uppercase tracking-wider">Chapitre 3 — Agilité Internationale</span>
+              <h2 className="text-2xl font-black text-gray-900 dark:text-white mt-1 flex items-center gap-2">
+                <Settings className="w-6 h-6 text-indigo-600" />
+                Moteur Intelligent de Gestion Multi-Systèmes Éducatifs
+              </h2>
+            </div>
+            <span className="px-3 py-1 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 rounded-full font-bold text-xs border border-indigo-200 dark:border-indigo-800">
+              Paramétrage Zero-Code Sans Modification de Code Source
+            </span>
+          </div>
+
+          {/* Banner Overview */}
+          <div className="p-6 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-2xl space-y-3 shadow-lg border border-indigo-500/20">
+            <div className="flex items-center gap-2 text-indigo-300 font-bold text-sm">
+              <Sparkles size={20} className="text-indigo-400" />
+              Adaptabilité Académique Globale & Souveraineté Ministérielle
+            </div>
+            <p className="text-xs sm:text-sm text-indigo-100 leading-relaxed">
+              Edu-Nify possède un <strong>moteur intelligent, universel et entièrement paramétrable</strong> capable de s'adapter automatiquement aux différents systèmes éducatifs du monde entier sans nécessiter la moindre ligne de code informatique additionnelle. Chaque État, Ministère ou réseau d'écoles configure dynamiquement ses cycles, règles de calcul, coefficients et bulletins.
+            </p>
+          </div>
+
+          {/* Key Components Grid */}
+          <div className="space-y-4">
+            <h3 className="font-black text-gray-900 dark:text-white text-lg flex items-center gap-2">
+              <Cpu className="text-indigo-600" size={20} />
+              Composants Majeurs & Moteur de Règles (Rule Engine)
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-200/80 dark:border-gray-700 space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 font-bold">
+                  <Layers size={20} />
+                </div>
+                <h4 className="font-extrabold text-sm text-gray-900 dark:text-white">Multi-Systèmes Simultanés</h4>
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Prise en charge simultanée de plusieurs modèles scolaires (ex: gabonais, français, canadien, anglophone) au sein d'une seule et même infrastructure nationale.
+                </p>
+              </div>
+
+              <div className="p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-200/80 dark:border-gray-700 space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-emerald-600 font-bold">
+                  <Scale size={20} />
+                </div>
+                <h4 className="font-extrabold text-sm text-gray-900 dark:text-white">Rule Engine Paramétrable</h4>
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Moteur de règles qui applique instantanément les contraintes de pondération, d'assiduité, de seuils de passage et de critères d'admissibilité.
+                </p>
+              </div>
+
+              <div className="p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-200/80 dark:border-gray-700 space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-amber-600 font-bold">
+                  <BarChart3 size={20} />
+                </div>
+                <h4 className="font-extrabold text-sm text-gray-900 dark:text-white">Calculateur Dynamique</h4>
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Calcule automatiquement les notes, moyennes pondérées, classements, crédits (ECTS/capitalisables), Unités d'Enseignement (UE) et diplômes.
+                </p>
+              </div>
+
+              <div className="p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-200/80 dark:border-gray-700 space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center text-purple-600 font-bold">
+                  <ShieldCheck size={20} />
+                </div>
+                <h4 className="font-extrabold text-sm text-gray-900 dark:text-white">Console Ministérielle Zero-Code</h4>
+                <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                  Interface visuelle dédiée permettant au Ministère de créer, modifier ou ajuster un système éducatif à tout moment sans faire appel à un développeur.
+                </p>
+              </div>
+
+              <div className="p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-200/80 dark:border-gray-700 space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/50 flex items-center justify-center text-rose-600 font-bold">
+                  <GraduationCap size={20} />
+                </div>
+                <h4 className="font-extrabold text-sm text-gray-900 dark:text-white">Personnalisation Intégrale</h4>
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Cycles, niveaux, matières, coefficients par série, bulletins certifiés, mentions et calendriers scolaires configurés à 100%.
+                </p>
+              </div>
+
+              <div className="p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-200/80 dark:border-gray-700 space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 font-bold">
+                  <Globe size={20} />
+                </div>
+                <h4 className="font-extrabold text-sm text-gray-900 dark:text-white">Statistiques Nationales Harmonisées</h4>
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Restitution de données agrégées à l'échelle d'un gouvernement ou d'une région, tout en préservant l'équivalence des diplômes et la comparabilité.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Supported Systems Showcase */}
+          <div className="space-y-4">
+            <h3 className="font-black text-gray-900 dark:text-white text-lg flex items-center gap-2">
+              <Globe className="text-emerald-600" size={20} />
+              Systèmes Éducatifs Déjà Pris en Charge & Extensions
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-5 bg-indigo-50/60 dark:bg-indigo-950/40 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-black text-indigo-900 dark:text-indigo-200 text-sm">Système Scolaire Gabonais (MEN)</h4>
+                  <span className="px-2 py-0.5 bg-indigo-200 dark:bg-indigo-800 text-indigo-800 dark:text-indigo-100 font-bold text-[10px] rounded-md">Natif</span>
+                </div>
+                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                  3 trimestres, notation sur 20, coefficients par séries (A1, A2, B, C, D, TI, Technique), diplômes CEP, BEPC, Baccalauréat avec bulletins certifiés QR Code d'État.
+                </p>
+              </div>
+
+              <div className="p-5 bg-emerald-50/60 dark:bg-emerald-950/40 rounded-2xl border border-emerald-100 dark:border-emerald-900/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-black text-emerald-900 dark:text-emerald-200 text-sm">Système Scolaire Français (AEFE / MEN)</h4>
+                  <span className="px-2 py-0.5 bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-100 font-bold text-[10px] rounded-md">Natif</span>
+                </div>
+                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                  Contrôle continu, socle commun de compétences, Baccalauréat Général & Technologique avec spécialités et Grand Oral.
+                </p>
+              </div>
+
+              <div className="p-5 bg-amber-50/60 dark:bg-amber-950/40 rounded-2xl border border-amber-100 dark:border-amber-900/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-black text-amber-900 dark:text-amber-200 text-sm">Système Franco-Canadien / Québécois</h4>
+                  <span className="px-2 py-0.5 bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-100 font-bold text-[10px] rounded-md">Natif</span>
+                </div>
+                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                  Évaluation par 3 étapes, notation en pourcentage (%), crédits d'études, bulletins ministériels canadiens et cours à la carte.
+                </p>
+              </div>
+
+              <div className="p-5 bg-purple-50/60 dark:bg-purple-950/40 rounded-2xl border border-purple-100 dark:border-purple-900/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-black text-purple-900 dark:text-purple-200 text-sm">Systèmes Anglophones, Américains & Autres</h4>
+                  <span className="px-2 py-0.5 bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-100 font-bold text-[10px] rounded-md">Extension rapide</span>
+                </div>
+                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                  Prise en charge des cursus Cambridge (IGCSE, A-Levels), américain (GPA sur 4.0), belge, marocain, sénégalais, camerounais, etc.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Automated Business Logic checklist */}
+          <div className="p-6 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-200/80 dark:border-gray-700 space-y-4">
+            <h3 className="font-black text-gray-900 dark:text-white text-base flex items-center gap-2">
+              <CheckSquare className="text-indigo-600" size={18} />
+              Gestion Automatique des Règles Académiques & Décisions de Conseil
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+              {[
+                "Règles de passage en classe supérieure & seuils",
+                "Conditions de redoublement & plafonds d'âge",
+                "Conditions d'exclusion académique & disciplinaire",
+                "Calculs de moyennes générale & par groupe",
+                "Coefficients variables par matière & trimestre",
+                "Périodes scolaires (trimestres, semestres, etc.)",
+                "Bulletins officiels & maquettes personnalisées",
+                "Diplômes d'État, attestations & certificats",
+                "Calendriers scolaires & vacances officielles",
+                "Programmes pédagogiques & volumes horaires",
+                "Critères d'attribution des mentions d'excellence",
+                "Statistiques nationales & régionales adaptées"
+              ].map((item, idx) => (
+                <div key={idx} className="flex items-center gap-2 p-2.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 font-medium text-gray-800 dark:text-gray-200">
+                  <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chapter 4 View (Modules) */}
+      {activeChapter === 4 && (
         <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 sm:p-8 border border-gray-200/80 dark:border-gray-700/80 shadow-2xs space-y-6">
           <div className="border-b border-gray-100 dark:border-gray-700/80 pb-4 flex items-center justify-between flex-wrap gap-4">
             <div>
-              <span className="text-xs font-black text-indigo-600 uppercase tracking-wider">Chapitre 3</span>
+              <span className="text-xs font-black text-indigo-600 uppercase tracking-wider">Chapitre 4</span>
               <h2 className="text-2xl font-black text-gray-900 dark:text-white mt-1">
                 Description des 45 Modules Fonctionnels
               </h2>
@@ -537,11 +813,11 @@ export default function TechSheet() {
         </div>
       )}
 
-      {/* Chapter 4 View */}
-      {activeChapter === 4 && (
+      {/* Chapter 5 View (Roles) */}
+      {activeChapter === 5 && (
         <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 sm:p-8 border border-gray-200/80 dark:border-gray-700/80 shadow-2xs space-y-6">
           <div className="border-b border-gray-100 dark:border-gray-700/80 pb-4">
-            <span className="text-xs font-black text-indigo-600 uppercase tracking-wider">Chapitre 4</span>
+            <span className="text-xs font-black text-indigo-600 uppercase tracking-wider">Chapitre 5</span>
             <h2 className="text-2xl font-black text-gray-900 dark:text-white mt-1">
               Matrice des Rôles & Droits d'Accès du Système (24 Rôles)
             </h2>
@@ -579,16 +855,16 @@ export default function TechSheet() {
         </div>
       )}
 
-      {/* Chapters 5-8 summary cards */}
-      {activeChapter >= 5 && (
+      {/* Chapters 6-9 summary cards */}
+      {activeChapter >= 6 && (
         <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 sm:p-8 border border-gray-200/80 dark:border-gray-700/80 shadow-2xs space-y-6">
           <div className="border-b border-gray-100 dark:border-gray-700/80 pb-4">
-            <span className="text-xs font-black text-indigo-600 uppercase tracking-wider">Chapitres {activeChapter} à 8</span>
+            <span className="text-xs font-black text-indigo-600 uppercase tracking-wider">Chapitres {activeChapter} à 9</span>
             <h2 className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-              {activeChapter === 5 && "Tableaux de Bord & Pilotage Stratégique"}
-              {activeChapter === 6 && "Technologies, Cybersécurité & Souveraineté"}
-              {activeChapter === 7 && "Bénéfices Stratégiques pour le Gouvernement"}
-              {activeChapter === 8 && "Feuille de Route & Déploiement National"}
+              {activeChapter === 6 && "Tableaux de Bord & Pilotage Stratégique"}
+              {activeChapter === 7 && "Technologies, Cybersécurité & Souveraineté"}
+              {activeChapter === 8 && "Bénéfices Stratégiques pour le Gouvernement"}
+              {activeChapter === 9 && "Feuille de Route & Déploiement National"}
             </h2>
           </div>
 
@@ -606,3 +882,4 @@ export default function TechSheet() {
     </div>
   );
 }
+
