@@ -87,7 +87,7 @@ export default function TechSheet() {
         <!-- COVER PAGE -->
         <div class="cover">
           <div style="margin-bottom: 20px; text-align: center;">
-            <img src="${EDU_NIFY_LOGO_BASE64}" alt="Edu-Nify Logo" style="height: 120px; width: 120px; object-fit: contain; display: block; margin: 0 auto 15px auto;" />
+            <img src="/logo.png" alt="Edu-Nify Logo" style="height: 120px; width: 120px; object-fit: contain; display: block; margin: 0 auto 15px auto;" onerror="this.src='${EDU_NIFY_LOGO_BASE64}'" />
           </div>
           <div class="cover-badge">DOCUMENT MAÎTRE DE STRATÉGIE GOUVERNEMENTALE & INSTITUTIONNELLE</div>
           <div class="cover-title">EDU-NIFY</div>
@@ -437,9 +437,13 @@ export default function TechSheet() {
           <div className="space-y-3 max-w-3xl">
             <div className="flex items-center gap-3">
               <img 
-                src={EDU_NIFY_LOGO_BASE64} 
+                src="/logo.png" 
                 alt="Edu-Nify Logo" 
                 className="w-14 h-14 object-contain bg-white/10 p-1.5 rounded-2xl border border-white/20 shadow-md shrink-0" 
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = EDU_NIFY_LOGO_BASE64;
+                }}
               />
               <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-bold tracking-wider uppercase border border-indigo-400/30">
                 <Landmark className="w-4 h-4 text-indigo-400" />
