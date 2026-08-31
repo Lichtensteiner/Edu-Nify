@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldCheck, 
   Baby, 
@@ -26,22 +26,36 @@ import {
   AlertTriangle,
   Heart,
   FileBadge,
-  Sparkle
+  Sparkle,
+  School,
+  Award,
+  Building2,
+  UserCheck,
+  Compass,
+  BookmarkCheck,
+  CheckCircle2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useAuth, mapPositionToResponsibility } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotification } from '../contexts/NotificationContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { administrativeResponsibilities } from './Staff';
+import { getSystemConfig } from '../constants/educationalSystems';
 
 export default function ResponsibilityZones() {
   const { currentUser } = useAuth();
+  const { currentEstablishment } = useEstablishment();
   const { t, tData } = useLanguage();
   const { notifySuccess, notifyError } = useNotification();
 
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
+  const systemConfig = getSystemConfig(currentEstablishment?.systemeScolaire);
+
   // All administrative responsibility IDs that are available
-  const availableResponsibilityIds = React.useMemo(() => {
+  const availableResponsibilityIds = useMemo(() => {
     return administrativeResponsibilities.map(r => r.id);
   }, []);
 
@@ -50,6 +64,7 @@ export default function ResponsibilityZones() {
       case 'responsable_maternelle': return Baby;
       case 'responsable_primaire': return BookOpen;
       case 'responsable_college': return GraduationCap;
+      case 'responsable_lycee': return School;
       case 'gestionnaire_comptable': return Wallet;
       case 'responsable_pedagogique': return FileCheck;
       case 'surveillant_general': return ShieldAlert;
@@ -167,31 +182,35 @@ export default function ResponsibilityZones() {
   }, [accessibleResponsibilityIds, activeRespId]);
 
   // Real-time states for Maternelle
-  const [siestas, setSiestas] = useState<Array<{id: string, name: string, classroom: string, status: 'awake' | 'sleeping' | 'resting'}>>([]);
-  const [maternelleTransmissions, setMaternelleTransmissions] = useState<Array<{id: string, kidName: string, notes: string, bottles: number, date: string}>>([]);
+  const [siestas, setSiestas] = useState<Array<{id: string, name: string, classroom: string, status: 'awake' | 'sleeping' | 'resting', etablissement?: string}>>([]);
+  const [maternelleTransmissions, setMaternelleTransmissions] = useState<Array<{id: string, kidName: string, notes: string, bottles: number, date: string, etablissement?: string}>>([]);
 
   // Subscribe to real-time Firestore updates for Maternelle
   useEffect(() => {
     if (!accessibleResponsibilityIds.includes('responsable_maternelle')) return;
 
     const unsubSiestas = onSnapshot(collection(db, 'maternelle_siestas'), (snapshot) => {
-      if (snapshot.empty) {
-        // Bootstrap default siestas if collection is empty
+      const data = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          name: doc.data().name,
+          classroom: doc.data().classroom,
+          status: doc.data().status as 'awake' | 'sleeping' | 'resting',
+          etablissement: doc.data().etablissement || 'EDU-001'
+        }))
+        .filter(item => item.etablissement === activeEstId);
+
+      if (data.length === 0 && snapshot.empty) {
+        // Bootstrap default siestas if collection is totally empty
         const defaults = [
-          { name: 'Léo Martin', classroom: 'Petite Section A', status: 'resting' },
-          { name: 'Mia Kouao', classroom: 'Moyenne Section B', status: 'sleeping' },
-          { name: 'Noé Dupont', classroom: 'Petite Section A', status: 'awake' },
+          { name: 'Léo Martin', classroom: 'Petite Section A', status: 'resting', etablissement: activeEstId },
+          { name: 'Mia Kouao', classroom: 'Moyenne Section B', status: 'sleeping', etablissement: activeEstId },
+          { name: 'Noé Dupont', classroom: 'Petite Section A', status: 'awake', etablissement: activeEstId },
         ];
         defaults.forEach(async (item) => {
           await addDoc(collection(db, 'maternelle_siestas'), item);
         });
       } else {
-        const data = snapshot.docs.map(doc => ({
-          id: doc.id,
-          name: doc.data().name,
-          classroom: doc.data().classroom,
-          status: doc.data().status as 'awake' | 'sleeping' | 'resting'
-        }));
         setSiestas(data);
       }
     }, (error) => {
@@ -199,22 +218,26 @@ export default function ResponsibilityZones() {
     });
 
     const unsubTransmissions = onSnapshot(collection(db, 'maternelle_transmissions'), (snapshot) => {
-      if (snapshot.empty) {
+      const data = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          kidName: doc.data().kidName,
+          notes: doc.data().notes,
+          bottles: Number(doc.data().bottles || 0),
+          date: doc.data().date,
+          etablissement: doc.data().etablissement || 'EDU-001'
+        }))
+        .filter(item => item.etablissement === activeEstId);
+
+      if (data.length === 0 && snapshot.empty) {
         // Bootstrap default transmissions if collection is empty
         const defaults = [
-          { kidName: 'Léo Martin', notes: 'A bien mangé à midi. Sieste calme de 1h30.', bottles: 2, date: 'Aujourd\'hui' }
+          { kidName: 'Léo Martin', notes: 'A bien mangé à midi. Sieste calme de 1h30.', bottles: 2, date: 'Aujourd\'hui', etablissement: activeEstId }
         ];
         defaults.forEach(async (item) => {
           await addDoc(collection(db, 'maternelle_transmissions'), item);
         });
       } else {
-        const data = snapshot.docs.map(doc => ({
-          id: doc.id,
-          kidName: doc.data().kidName,
-          notes: doc.data().notes,
-          bottles: Number(doc.data().bottles || 0),
-          date: doc.data().date
-        }));
         setMaternelleTransmissions(data);
       }
     }, (error) => {
@@ -225,7 +248,7 @@ export default function ResponsibilityZones() {
       unsubSiestas();
       unsubTransmissions();
     };
-  }, [accessibleResponsibilityIds]);
+  }, [accessibleResponsibilityIds, activeEstId]);
 
   // 2. Reading Challenge (Primaire) state
   const [readingProgress, setReadingProgress] = useState<Array<{id: string, name: string, booksRead: number, goal: number, rating: string}>>([]);
@@ -235,10 +258,53 @@ export default function ResponsibilityZones() {
   const [collegeDetentions, setCollegeDetentions] = useState<Array<{id: string, student: string, reason: string, teacher: string, date: string, hour: string, proctor: string}>>([]);
   const [brevetChapters, setBrevetChapters] = useState<Array<{id: string, subject: string, topic: string, status: 'ready' | 'pending'}>>([]);
 
+  // 3b. Lycée / Proviseur state (6ème en Terminale / 2nde en Terminale)
+  const [mockExams, setMockExams] = useState<Array<{
+    id: string;
+    name: string;
+    serie: string;
+    date: string;
+    targetClass: string;
+    status: 'planned' | 'in_progress' | 'graded' | 'published';
+    supervisor: string;
+    etablissement?: string;
+  }>>([]);
+  const [classCouncils, setClassCouncils] = useState<Array<{
+    id: string;
+    className: string;
+    president: string;
+    date: string;
+    status: 'scheduled' | 'completed';
+    honors: number;
+    warnings: number;
+    remarks: string;
+    etablissement?: string;
+  }>>([]);
+  const [postBacWishes, setPostBacWishes] = useState<Array<{
+    id: string;
+    studentName: string;
+    serie: string;
+    targetProgram: string;
+    proviseurAdvice: 'Tres Favorable' | 'Favorable' | 'Reserve';
+    status: 'submitted' | 'validated';
+    date: string;
+    etablissement?: string;
+  }>>([]);
+  const [lyceeDiscipline, setLyceeDiscipline] = useState<Array<{
+    id: string;
+    studentName: string;
+    className: string;
+    motif: string;
+    sanction: string;
+    date: string;
+    etablissement?: string;
+  }>>([]);
+
   // 4. Comptabilité Ledger Flow (Cash Flow ledger)
   const [accountingFlows, setAccountingFlows] = useState<Array<{id: string, type: 'inflow' | 'outflow', category: string, amount: number, description: string, date: string, isCanteen?: boolean}>>([]);
 
   // Database-synced states for real-time validation & dropdown selects
+  const [allEstablishmentUsers, setAllEstablishmentUsers] = useState<any[]>([]);
   const [dbStudents, setDbStudents] = useState<any[]>([]);
   const [dbSubjects, setDbSubjects] = useState<any[]>([]);
   const [dbSurveillants, setDbSurveillants] = useState<any[]>([]);
@@ -272,6 +338,7 @@ export default function ResponsibilityZones() {
   // 11. IT Admin
   const [itLoans, setItLoans] = useState<Array<{id: string, cartId: string, classTarget: string, duration: string, status: 'borrowed' | 'returned'}>>([]);
   const [itTickets, setItTickets] = useState<Array<{id: string, item: string, description: string, severity: 'minor' | 'critical', status: 'open' | 'investigating' | 'resolved'}>>([]);
+
   useEffect(() => {
     const unsubs: Array<() => void> = [];
 
@@ -325,6 +392,41 @@ export default function ResponsibilityZones() {
         })));
       }, (err) => handleFirestoreError(err, OperationType.GET, 'resp_brevet_chapters'));
       unsubs.push(unsubChapters);
+    }
+
+    // 3b. Lycée / Proviseur Subscriptions
+    if (accessibleResponsibilityIds.includes('responsable_lycee')) {
+      const unsubExams = onSnapshot(collection(db, 'resp_lycee_mock_exams'), (snapshot) => {
+        const list = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as any))
+          .filter(e => (e.etablissement || 'EDU-001') === activeEstId);
+        setMockExams(list);
+      }, (err) => handleFirestoreError(err, OperationType.GET, 'resp_lycee_mock_exams'));
+      unsubs.push(unsubExams);
+
+      const unsubCouncils = onSnapshot(collection(db, 'resp_lycee_councils'), (snapshot) => {
+        const list = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as any))
+          .filter(c => (c.etablissement || 'EDU-001') === activeEstId);
+        setClassCouncils(list);
+      }, (err) => handleFirestoreError(err, OperationType.GET, 'resp_lycee_councils'));
+      unsubs.push(unsubCouncils);
+
+      const unsubPostBac = onSnapshot(collection(db, 'resp_lycee_postbac'), (snapshot) => {
+        const list = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as any))
+          .filter(p => (p.etablissement || 'EDU-001') === activeEstId);
+        setPostBacWishes(list);
+      }, (err) => handleFirestoreError(err, OperationType.GET, 'resp_lycee_postbac'));
+      unsubs.push(unsubPostBac);
+
+      const unsubDisc = onSnapshot(collection(db, 'resp_lycee_discipline'), (snapshot) => {
+        const list = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as any))
+          .filter(d => (d.etablissement || 'EDU-001') === activeEstId);
+        setLyceeDiscipline(list);
+      }, (err) => handleFirestoreError(err, OperationType.GET, 'resp_lycee_discipline'));
+      unsubs.push(unsubDisc);
     }
 
     // Remedial Groups
@@ -488,7 +590,9 @@ export default function ResponsibilityZones() {
 
     // Subscriptions to core collections (users, subjects, classes, payments, canteen_transactions) for real-time validation dropdowns
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const allUsers = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((u: any) => (u.etablissement || 'EDU-001') === activeEstId);
       const students = allUsers.filter((u: any) => u.role === 'élève' || u.role === 'eleve');
       let surveillants = allUsers.filter((u: any) => 
         u.role === 'surveillant' || 
@@ -516,25 +620,34 @@ export default function ResponsibilityZones() {
     unsubs.push(unsubUsers);
 
     const unsubSubjects = onSnapshot(collection(db, 'subjects'), (snapshot) => {
-      const subs = snapshot.docs.map(doc => doc.data().name as string).filter(Boolean);
+      const subs = snapshot.docs
+        .filter(doc => (doc.data().etablissement || 'EDU-001') === activeEstId)
+        .map(doc => doc.data().name as string)
+        .filter(Boolean);
       setDbSubjects(subs);
     }, (err) => handleFirestoreError(err, OperationType.GET, 'subjects'));
     unsubs.push(unsubSubjects);
 
     const unsubClasses = onSnapshot(collection(db, 'classes'), (snapshot) => {
-      const classesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const classesData = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((c: any) => (c.etablissement || 'EDU-001') === activeEstId);
       setDbClasses(classesData);
     }, (err) => handleFirestoreError(err, OperationType.GET, 'classes'));
     unsubs.push(unsubClasses);
 
     const unsubPayments = onSnapshot(collection(db, 'payments'), (snapshot) => {
-      const payData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const payData = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((p: any) => (p.etablissement || 'EDU-001') === activeEstId);
       setPayments(payData);
     }, (err) => handleFirestoreError(err, OperationType.GET, 'payments'));
     unsubs.push(unsubPayments);
 
     const unsubCanteen = onSnapshot(collection(db, 'canteen_transactions'), (snapshot) => {
-      const transData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const transData = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((c: any) => (c.etablissement || 'EDU-001') === activeEstId);
       setCanteenTransactions(transData);
     }, (err) => handleFirestoreError(err, OperationType.GET, 'canteen_transactions'));
     unsubs.push(unsubCanteen);
@@ -542,7 +655,7 @@ export default function ResponsibilityZones() {
     return () => {
       unsubs.forEach(cleanup => cleanup());
     };
-  }, [accessibleResponsibilityIds]);
+  }, [accessibleResponsibilityIds, activeEstId]);
 
   // Dynamic Real-time compute of Ledger Flows for the Accountant responsibility
   useEffect(() => {
@@ -610,9 +723,12 @@ export default function ResponsibilityZones() {
   }, [payments, canteenTransactions, dbStudents]);
 
   // Form states
+  const [maternelleFormType, setMaternelleFormType] = useState<'transmission' | 'siesta'>('transmission');
   const [formKidName, setFormKidName] = useState('');
-  const [formKidClassroom, setFormKidClassroom] = useState('Petite Section A');
+  const [formKidClassroom, setFormKidClassroom] = useState('Petite Section');
   const [formNotesText, setFormNotesText] = useState('');
+  const [formKidBottles, setFormKidBottles] = useState('2');
+  const [formSiestaStatus, setFormSiestaStatus] = useState<'awake' | 'resting' | 'sleeping'>('sleeping');
   
   const [formReadingName, setFormReadingName] = useState('');
   const [formReadingLevel, setFormReadingLevel] = useState('En progrès');
@@ -669,9 +785,45 @@ export default function ResponsibilityZones() {
   const [formCallMsg, setFormCallMsg] = useState('');
   const [formCallStudent, setFormCallStudent] = useState('');
 
+  // Lycée / Proviseur interactive form states
+  const [lyceeFormType, setLyceeFormType] = useState<'exam' | 'council' | 'postbac' | 'discipline'>('exam');
+  const [formExamName, setFormExamName] = useState('');
+  const [formExamSerie, setFormExamSerie] = useState('Terminale Générale / BAC');
+  const [formExamClass, setFormExamClass] = useState('');
+  const [formExamDate, setFormExamDate] = useState('');
+  const [formExamSupervisor, setFormExamSupervisor] = useState('');
+
+  const [formCouncilClass, setFormCouncilClass] = useState('');
+  const [formCouncilPresident, setFormCouncilPresident] = useState('Proviseur / Responsable Lycée');
+  const [formCouncilDate, setFormCouncilDate] = useState('');
+  const [formCouncilHonors, setFormCouncilHonors] = useState('0');
+  const [formCouncilWarnings, setFormCouncilWarnings] = useState('0');
+  const [formCouncilRemarks, setFormCouncilRemarks] = useState('');
+
+  const [formPostBacStudent, setFormPostBacStudent] = useState('');
+  const [formPostBacSerie, setFormPostBacSerie] = useState('Terminale S / Scientifique');
+  const [formPostBacTarget, setFormPostBacTarget] = useState('CPGE / Université / Grandes Écoles');
+  const [formPostBacAdvice, setFormPostBacAdvice] = useState<'Tres Favorable' | 'Favorable' | 'Reserve'>('Tres Favorable');
+
+  const [formDiscStudent, setFormDiscStudent] = useState('');
+  const [formDiscClass, setFormDiscClass] = useState('');
+  const [formDiscMotif, setFormDiscMotif] = useState('');
+  const [formDiscSanction, setFormDiscSanction] = useState('Avertissement solennel du Proviseur');
+
   const renderAssignedTasksAndDossiers = (scopeName: string) => {
-    const assignedTasks = secTasks.filter(t => t.scope === scopeName);
-    const assignedDossiers = dossiers.filter(d => d.level === scopeName);
+    const isMatch = (target: string) => {
+      if (!target) return false;
+      if (target === scopeName) return true;
+      if (scopeName.toLowerCase().includes('lyc') && (target.toLowerCase().includes('lyc') || target.toLowerCase().includes('proviseur'))) return true;
+      if (scopeName.toLowerCase().includes('maternelle') && target.toLowerCase().includes('maternelle')) return true;
+      if (scopeName.toLowerCase().includes('primaire') && target.toLowerCase().includes('primaire')) return true;
+      if (scopeName.toLowerCase().includes('coll') && target.toLowerCase().includes('coll')) return true;
+      if (scopeName.toLowerCase().includes('direction') && target.toLowerCase().includes('direction')) return true;
+      return false;
+    };
+
+    const assignedTasks = secTasks.filter(t => isMatch(t.scope) || (scopeName.includes('Direction') && t.scope === 'Bureau Direction'));
+    const assignedDossiers = dossiers.filter(d => isMatch(d.level) || (scopeName.includes('Direction') && d.level === 'Bureau Direction'));
 
     if (assignedTasks.length === 0 && assignedDossiers.length === 0) {
       return null;
@@ -1228,6 +1380,318 @@ export default function ResponsibilityZones() {
                   </div>
                 </div>
                 {renderAssignedTasksAndDossiers('Responsable Collège')}
+              </div>
+            )}
+
+            {/* Dashboard 3b: Responsable Lycée / Proviseur (6ème en Terminale) */}
+            {activeRespId === 'responsable_lycee' && (
+              <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] p-6 border border-gray-150 dark:border-gray-750 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-105 dark:border-gray-700">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3.5 bg-purple-100 dark:bg-purple-905/20 text-purple-600 rounded-2xl">
+                      <School size={24} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-black text-gray-900 dark:text-white">Direction du Lycée & Études Supérieures</h2>
+                        <span className="text-[10px] bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-300 font-bold px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-800">
+                          Proviseur
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Supervision académique de la 6ème en Terminale, Baccalauréat, conseils de classe et orientation post-bac.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* System tag badge */}
+                  <div className="text-right bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <p className="text-[9px] uppercase font-bold text-gray-400 tracking-wider">Système Pédagogique</p>
+                    <p className="text-[11px] font-black text-purple-600 dark:text-purple-400">
+                      {systemConfig?.name || 'Système National'}
+                    </p>
+                    <p className="text-[9px] text-gray-400 font-mono mt-0.5">
+                      {systemConfig?.diplomas?.[0] || 'Baccalauréat'} • {systemConfig?.evaluationScale || '0-20'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Key Metric Overview */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3.5 bg-purple-50/60 dark:bg-purple-950/20 rounded-2xl border border-purple-100 dark:border-purple-900/30 text-center">
+                    <p className="text-[10px] uppercase font-black tracking-wider text-purple-600 dark:text-purple-400">Examens Blancs</p>
+                    <p className="text-2xl font-black text-purple-900 dark:text-purple-200 mt-1">{mockExams.length}</p>
+                    <p className="text-[9px] text-gray-400 mt-0.5">Épreuves officielles</p>
+                  </div>
+                  <div className="p-3.5 bg-blue-50/60 dark:bg-blue-950/20 rounded-2xl border border-blue-100 dark:border-blue-900/30 text-center">
+                    <p className="text-[10px] uppercase font-black tracking-wider text-blue-600 dark:text-blue-400">Conseils de Classe</p>
+                    <p className="text-2xl font-black text-blue-900 dark:text-blue-200 mt-1">{classCouncils.length}</p>
+                    <p className="text-[9px] text-gray-400 mt-0.5">6ème à Terminale</p>
+                  </div>
+                  <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 text-center">
+                    <p className="text-[10px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400">Fiches Post-Bac</p>
+                    <p className="text-2xl font-black text-emerald-900 dark:text-emerald-200 mt-1">{postBacWishes.length}</p>
+                    <p className="text-[9px] text-gray-400 mt-0.5">Avis Proviseur</p>
+                  </div>
+                  <div className="p-3.5 bg-rose-50/60 dark:bg-rose-950/20 rounded-2xl border border-rose-100 dark:border-rose-900/30 text-center">
+                    <p className="text-[10px] uppercase font-black tracking-wider text-rose-600 dark:text-rose-400">Discipline Sup.</p>
+                    <p className="text-2xl font-black text-rose-900 dark:text-rose-200 mt-1">{lyceeDiscipline.length}</p>
+                    <p className="text-[9px] text-gray-400 mt-0.5">Dossiers suivis</p>
+                  </div>
+                </div>
+
+                {/* Section 1: Examens Blancs & BAC */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                      <Award size={14} className="text-purple-600" />
+                      Organisation des Bacs Blancs & Examens Trimestriels
+                    </h3>
+                    <span className="text-[10px] text-gray-400 font-mono">
+                      {mockExams.filter(e => e.status === 'published').length}/{mockExams.length} publiés
+                    </span>
+                  </div>
+
+                  {mockExams.length === 0 ? (
+                    <div className="p-4 bg-gray-50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center">
+                      <p className="text-xs text-gray-400">Aucun examen blanc planifié. Utilisez le formulaire à droite pour en ajouter.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {mockExams.map(exam => (
+                        <div key={exam.id} className="p-4 bg-gray-50 dark:bg-gray-900/30 rounded-2xl border border-gray-100 dark:border-gray-700/60 flex flex-col justify-between space-y-3">
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                                {exam.targetClass || exam.serie || 'Lycée'}
+                              </span>
+                              <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                exam.status === 'published' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' :
+                                exam.status === 'graded' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
+                                exam.status === 'in_progress' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' :
+                                'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                              }`}>
+                                {exam.status === 'published' ? 'Publié' :
+                                 exam.status === 'graded' ? 'Corrigé' :
+                                 exam.status === 'in_progress' ? 'En cours' : 'Planifié'}
+                              </span>
+                            </div>
+                            <h4 className="text-xs font-black text-gray-900 dark:text-white mt-2 leading-snug">
+                              {exam.name}
+                            </h4>
+                            <p className="text-[10px] text-gray-400 mt-1">
+                              📅 {exam.date} • Surveillant : <strong className="text-gray-600 dark:text-gray-300">{exam.supervisor || 'Non assigné'}</strong>
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800">
+                            <button
+                              onClick={async () => {
+                                if (!enforcePermission('responsable_lycee')) return;
+                                try {
+                                  const nextStatus: Record<string, 'planned' | 'in_progress' | 'graded' | 'published'> = {
+                                    'planned': 'in_progress',
+                                    'in_progress': 'graded',
+                                    'graded': 'published',
+                                    'published': 'planned'
+                                  };
+                                  await updateDoc(doc(db, 'resp_lycee_mock_exams', exam.id), {
+                                    status: nextStatus[exam.status] || 'planned'
+                                  });
+                                  notifySuccess("Statut de l'épreuve actualisé !");
+                                } catch (err) {
+                                  console.error("Error updating exam status:", err);
+                                }
+                              }}
+                              className="text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                            >
+                              Avancer étape ➔
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!enforcePermission('responsable_lycee')) return;
+                                try {
+                                  await deleteDoc(doc(db, 'resp_lycee_mock_exams', exam.id));
+                                  notifySuccess("Examen supprimé");
+                                } catch (err) {
+                                  console.error("Error deleting exam:", err);
+                                }
+                              }}
+                              className="p-1 text-gray-400 hover:text-red-500 rounded cursor-pointer"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 2: Conseils de Classe & Commissions */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                      <Users size={14} className="text-blue-600" />
+                      Conseils de Classe & Décisions Trimestrielles
+                    </h3>
+                  </div>
+
+                  {classCouncils.length === 0 ? (
+                    <div className="p-4 bg-gray-50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center">
+                      <p className="text-xs text-gray-400">Aucun procès-verbal de conseil de classe enregistré.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {classCouncils.map(council => (
+                        <div key={council.id} className="p-4 bg-gray-50 dark:bg-gray-900/30 rounded-2xl border border-gray-100 dark:border-gray-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-gray-900 dark:text-white">
+                                {council.className}
+                              </span>
+                              <span className="text-[9px] font-mono bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300 px-2 py-0.5 rounded font-bold">
+                                {council.date}
+                              </span>
+                              <span className="text-[9px] text-gray-400">
+                                Présidé par : {council.president}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-600 dark:text-gray-300 italic">
+                              "{council.remarks || 'Conseil satisfaisant. Progression générale observée.'}"
+                            </p>
+                            <div className="flex items-center gap-3 pt-1 text-[10px]">
+                              <span className="text-emerald-600 font-bold">🌟 Félicitations : {council.honors || 0}</span>
+                              <span className="text-rose-600 font-bold">⚠️ Avertissements : {council.warnings || 0}</span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={async () => {
+                              if (!enforcePermission('responsable_lycee')) return;
+                              try {
+                                await deleteDoc(doc(db, 'resp_lycee_councils', council.id));
+                                notifySuccess("Procès-verbal de conseil supprimé");
+                              } catch (err) {
+                                console.error("Error deleting council:", err);
+                              }
+                            }}
+                            className="text-gray-400 hover:text-red-500 self-end sm:self-center p-1.5 rounded cursor-pointer"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 3: Orientation Post-Bac & Parcoursup */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                      <GraduationCap size={14} className="text-emerald-600" />
+                      Fiches d'Orientation Post-Bac & Avis du Chef d'Établissement
+                    </h3>
+                  </div>
+
+                  {postBacWishes.length === 0 ? (
+                    <div className="p-4 bg-gray-50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center">
+                      <p className="text-xs text-gray-400">Aucune fiche post-bac saisie pour les élèves de Terminale.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {postBacWishes.map(wish => (
+                        <div key={wish.id} className="p-3.5 bg-gray-50 dark:bg-gray-900/30 rounded-2xl border border-gray-100 dark:border-gray-700/60 flex items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-black text-gray-900 dark:text-white">{wish.studentName}</p>
+                              <span className="text-[9px] font-bold text-gray-400 font-mono">({wish.serie || 'Terminale'})</span>
+                            </div>
+                            <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
+                              Filière visée : <strong className="text-purple-600 dark:text-purple-400">{wish.targetProgram}</strong>
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-lg ${
+                              wish.proviseurAdvice === 'Tres Favorable' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' :
+                              wish.proviseurAdvice === 'Favorable' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' :
+                              'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                            }`}>
+                              Avis : {wish.proviseurAdvice}
+                            </span>
+                            <button
+                              onClick={async () => {
+                                if (!enforcePermission('responsable_lycee')) return;
+                                try {
+                                  await deleteDoc(doc(db, 'resp_lycee_postbac', wish.id));
+                                  notifySuccess("Fiche post-bac retirée");
+                                } catch (err) {
+                                  console.error("Error deleting postbac wish:", err);
+                                }
+                              }}
+                              className="p-1 text-gray-400 hover:text-red-500 rounded cursor-pointer"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 4: Discipline Supérieure & Commissions */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                      <ShieldAlert size={14} className="text-rose-600" />
+                      Conseil de Discipline du Second Cycle
+                    </h3>
+                  </div>
+
+                  {lyceeDiscipline.length === 0 ? (
+                    <div className="p-4 bg-gray-50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center">
+                      <p className="text-xs text-gray-400">Aucun dossier disciplinaire grave actif au niveau Lycée.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {lyceeDiscipline.map(d => (
+                        <div key={d.id} className="p-3.5 bg-rose-50/40 dark:bg-rose-950/10 rounded-2xl border border-rose-100 dark:border-rose-900/30 flex items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-black text-rose-950 dark:text-rose-200">{d.studentName}</p>
+                              <span className="text-[9px] font-mono text-gray-500">Classe : {d.className}</span>
+                            </div>
+                            <p className="text-[11px] text-gray-700 dark:text-gray-300 mt-0.5">
+                              Motif : {d.motif}
+                            </p>
+                            <p className="text-[10px] text-rose-600 font-bold mt-0.5">
+                              Décision Proviseur : {d.sanction}
+                            </p>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (!enforcePermission('responsable_lycee')) return;
+                              try {
+                                await deleteDoc(doc(db, 'resp_lycee_discipline', d.id));
+                                notifySuccess("Dossier disciplinaire clôturé");
+                              } catch (err) {
+                                console.error("Error deleting lycee disc:", err);
+                              }
+                            }}
+                            className="p-1 text-gray-400 hover:text-red-500 rounded cursor-pointer"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {renderAssignedTasksAndDossiers('Responsable Lycée')}
               </div>
             )}
 
@@ -2107,60 +2571,242 @@ export default function ResponsibilityZones() {
               ) : (
                 <>
                   {/* Form 1: Maternelle */}
-              {activeRespId === 'responsable_maternelle' && (
-                <form 
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!enforcePermission('responsable_maternelle')) return;
-                    if (!formKidName.trim()) return;
-                    
-                    try {
-                      await addDoc(collection(db, 'maternelle_transmissions'), {
-                        kidName: formKidName,
-                        notes: formNotesText || 'Enfant calme et joyeux.',
-                        bottles: 2,
-                        date: 'À l\'instant'
-                      });
-                      
-                      setFormKidName('');
-                      setFormNotesText('');
-                      notifySuccess("Note de transmission parents enregistrée !");
-                    } catch (error) {
-                      console.error("Error adding transmission:", error);
-                    }
-                  }}
-                  className="space-y-3 text-xs"
-                >
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400">Nom de l'Enfant</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: Emma Kouassi"
-                      value={formKidName}
-                      onChange={(e) => setFormKidName(e.target.value)}
-                      className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
-                    />
-                  </div>
+              {activeRespId === 'responsable_maternelle' && (() => {
+                const displayStudents = dbStudents;
+                const maternelleClasses = dbClasses.filter(c => {
+                  const n = (c.name || c.nom || '').toLowerCase();
+                  return n.includes('section') || n.includes('maternelle') || n.includes('tps') || n.includes('ps') || n.includes('ms') || n.includes('gs') || n.includes('garderie') || n.includes('crèche');
+                });
+                const defaultSections = maternelleClasses.length > 0 
+                  ? maternelleClasses.map(c => c.name || c.nom)
+                  : ['Petite Section', 'Moyenne Section', 'Grande Section', 'Toute Petite Section (TPS)', 'Garderie / Crèche'];
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400">Remarques de Transmission</label>
-                    <textarea 
-                      placeholder="Sieste de 2h, repas complet mangé, selles OK..."
-                      rows={3}
-                      value={formNotesText}
-                      onChange={(e) => setFormNotesText(e.target.value)}
-                      className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
-                    />
-                  </div>
+                return (
+                  <div className="space-y-3">
+                    {/* Action Selector */}
+                    <div className="grid grid-cols-2 gap-2 mb-1">
+                      <button
+                        type="button"
+                        onClick={() => setMaternelleFormType('transmission')}
+                        className={`py-2 text-[10px] font-black uppercase rounded-lg border transition-all cursor-pointer ${
+                          maternelleFormType === 'transmission'
+                            ? 'bg-pink-50 dark:bg-pink-950/30 text-pink-700 dark:text-pink-300 border-pink-500 font-bold'
+                            : 'bg-white dark:bg-gray-900 text-gray-400 border-gray-150 dark:border-gray-850'
+                        }`}
+                      >
+                        Transmission Parents
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMaternelleFormType('siesta')}
+                        className={`py-2 text-[10px] font-black uppercase rounded-lg border transition-all cursor-pointer ${
+                          maternelleFormType === 'siesta'
+                            ? 'bg-pink-50 dark:bg-pink-950/30 text-pink-700 dark:text-pink-300 border-pink-500 font-bold'
+                            : 'bg-white dark:bg-gray-900 text-gray-400 border-gray-150 dark:border-gray-850'
+                        }`}
+                      >
+                        Suivi Sieste / Sommeil
+                      </button>
+                    </div>
 
-                  <button 
-                    type="submit"
-                    className="w-full py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-black uppercase text-[10px] tracking-wider transition-all"
-                  >
-                    Publier Note Parent
-                  </button>
-                </form>
-              )}
+                    {maternelleFormType === 'transmission' ? (
+                      <form 
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!enforcePermission('responsable_maternelle')) return;
+                          if (!formKidName.trim()) {
+                            notifyError("Veuillez sélectionner ou saisir le nom de l'enfant.");
+                            return;
+                          }
+                          
+                          try {
+                            await addDoc(collection(db, 'maternelle_transmissions'), {
+                              kidName: formKidName,
+                              notes: formNotesText || 'Enfant calme et joyeux. Bonne journée passée en classe.',
+                              bottles: Number(formKidBottles) || 2,
+                              date: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                              etablissement: activeEstId
+                            });
+                            
+                            setFormKidName('');
+                            setFormNotesText('');
+                            notifySuccess("Note de transmission parents enregistrée avec succès !");
+                          } catch (error) {
+                            console.error("Error adding transmission:", error);
+                          }
+                        }}
+                        className="space-y-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Enfant de Maternelle</label>
+                          {displayStudents.length > 0 ? (
+                            <div className="space-y-1.5">
+                              <select 
+                                value={formKidName}
+                                onChange={(e) => setFormKidName(e.target.value)}
+                                className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
+                              >
+                                <option value="">-- Choisir un élève de l'établissement --</option>
+                                {displayStudents.map(student => (
+                                  <option key={student.id} value={`${student.prenom} ${student.nom}`}>
+                                    {student.prenom} {student.nom} ({student.classe || 'Maternelle'})
+                                  </option>
+                                ))}
+                              </select>
+                              <input 
+                                type="text" 
+                                placeholder="Ou saisir un autre nom..."
+                                value={formKidName}
+                                onChange={(e) => setFormKidName(e.target.value)}
+                                className="w-full p-2 bg-gray-50/50 dark:bg-gray-900/50 border rounded-lg text-[11px] outline-none"
+                              />
+                            </div>
+                          ) : (
+                            <input 
+                              type="text" 
+                              placeholder="Ex: Emma Kouassi"
+                              value={formKidName}
+                              onChange={(e) => setFormKidName(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
+                            />
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400 block">Biberons / Repas</label>
+                            <select
+                              value={formKidBottles}
+                              onChange={(e) => setFormKidBottles(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
+                            >
+                              <option value="1">1 Repas / Biberon</option>
+                              <option value="2">2 Repas / Biberons</option>
+                              <option value="3">3 Repas / Biberons</option>
+                              <option value="0">Aucun</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400 block">Section</label>
+                            <select
+                              value={formKidClassroom}
+                              onChange={(e) => setFormKidClassroom(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
+                            >
+                              {defaultSections.map(sec => (
+                                <option key={sec} value={sec}>{sec}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Remarques & Transmissions</label>
+                          <textarea 
+                            placeholder="Sieste de 2h, repas complet, humeur très joyeuse..."
+                            rows={3}
+                            value={formNotesText}
+                            onChange={(e) => setFormNotesText(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
+                          />
+                        </div>
+
+                        <button 
+                          type="submit"
+                          className="w-full py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer"
+                        >
+                          Publier Transmission Réelle
+                        </button>
+                      </form>
+                    ) : (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!enforcePermission('responsable_maternelle')) return;
+                          if (!formKidName.trim()) {
+                            notifyError("Veuillez sélectionner ou saisir le nom de l'enfant.");
+                            return;
+                          }
+
+                          try {
+                            await addDoc(collection(db, 'maternelle_siestas'), {
+                              name: formKidName,
+                              classroom: formKidClassroom,
+                              status: formSiestaStatus,
+                              etablissement: activeEstId
+                            });
+
+                            setFormKidName('');
+                            notifySuccess("Enfant ajouté au suivi sommeil en temps réel !");
+                          } catch (error) {
+                            console.error("Error adding siesta record:", error);
+                          }
+                        }}
+                        className="space-y-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Nom de l'enfant</label>
+                          {displayStudents.length > 0 ? (
+                            <select 
+                              value={formKidName}
+                              onChange={(e) => setFormKidName(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
+                            >
+                              <option value="">-- Choisir un enfant --</option>
+                              {displayStudents.map(student => (
+                                <option key={student.id} value={`${student.prenom} ${student.nom}`}>
+                                  {student.prenom} {student.nom} ({student.classe || 'Maternelle'})
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input 
+                              type="text" 
+                              placeholder="Ex: Louis Diallo"
+                              value={formKidName}
+                              onChange={(e) => setFormKidName(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
+                            />
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Section de Maternelle</label>
+                          <select
+                            value={formKidClassroom}
+                            onChange={(e) => setFormKidClassroom(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
+                          >
+                            {defaultSections.map(sec => (
+                              <option key={sec} value={sec}>{sec}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">État Initial du Sommeil</label>
+                          <select
+                            value={formSiestaStatus}
+                            onChange={(e) => setFormSiestaStatus(e.target.value as any)}
+                            className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border rounded-xl outline-none"
+                          >
+                            <option value="sleeping">Dort paisiblement</option>
+                            <option value="resting">Au repos / Calme</option>
+                            <option value="awake">Réveillé / En activité</option>
+                          </select>
+                        </div>
+
+                        <button 
+                          type="submit"
+                          className="w-full py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer"
+                        >
+                          Enregistrer dans le Dortoir
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Form 2: Primaire */}
               {activeRespId === 'responsable_primaire' && (
@@ -2401,6 +3047,477 @@ export default function ResponsibilityZones() {
                           className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer"
                         >
                           Planifier Révision
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Form 3b: Responsable Lycée / Proviseur (6ème en Terminale) */}
+              {activeRespId === 'responsable_lycee' && (() => {
+                const displayStudents = dbStudents;
+                const displayTeachers = dbSurveillants;
+                const lyceeClasses = dbClasses.filter(c => {
+                  const n = (c.name || c.nom || '').toLowerCase();
+                  return n.includes('2nde') || n.includes('seconde') || n.includes('1ère') || n.includes('première') || n.includes('premiere') || n.includes('terminale') || n.includes('tle') || n.includes('6') || n.includes('5') || n.includes('4') || n.includes('3');
+                });
+                const defaultClasses = lyceeClasses.length > 0 
+                  ? lyceeClasses.map(c => c.name || c.nom)
+                  : ['Terminale S / C', 'Terminale A / L', 'Terminale D', 'Première Spécialités', 'Seconde Générale', '3ème', '4ème', '5ème', '6ème'];
+
+                return (
+                  <div className="space-y-3">
+                    {/* Action Selector */}
+                    <div className="grid grid-cols-2 gap-2 mb-1">
+                      <button
+                        type="button"
+                        onClick={() => setLyceeFormType('exam')}
+                        className={`py-1.5 text-[9px] font-black uppercase rounded-lg border transition-all cursor-pointer ${
+                          lyceeFormType === 'exam'
+                            ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border-purple-500 font-bold'
+                            : 'bg-white dark:bg-gray-900 text-gray-400 border-gray-150 dark:border-gray-850'
+                        }`}
+                      >
+                        Examen Blanc / BAC
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLyceeFormType('council')}
+                        className={`py-1.5 text-[9px] font-black uppercase rounded-lg border transition-all cursor-pointer ${
+                          lyceeFormType === 'council'
+                            ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border-purple-500 font-bold'
+                            : 'bg-white dark:bg-gray-900 text-gray-400 border-gray-150 dark:border-gray-850'
+                        }`}
+                      >
+                        Conseil de Classe
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLyceeFormType('postbac')}
+                        className={`py-1.5 text-[9px] font-black uppercase rounded-lg border transition-all cursor-pointer ${
+                          lyceeFormType === 'postbac'
+                            ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border-purple-500 font-bold'
+                            : 'bg-white dark:bg-gray-900 text-gray-400 border-gray-150 dark:border-gray-850'
+                        }`}
+                      >
+                        Post-Bac & Orientation
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLyceeFormType('discipline')}
+                        className={`py-1.5 text-[9px] font-black uppercase rounded-lg border transition-all cursor-pointer ${
+                          lyceeFormType === 'discipline'
+                            ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border-purple-500 font-bold'
+                            : 'bg-white dark:bg-gray-900 text-gray-400 border-gray-150 dark:border-gray-850'
+                        }`}
+                      >
+                        Discipline Proviseur
+                      </button>
+                    </div>
+
+                    {/* Sub-form 1: Examen Blanc */}
+                    {lyceeFormType === 'exam' && (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!enforcePermission('responsable_lycee')) return;
+                          if (!formExamName.trim()) {
+                            notifyError("Veuillez saisir l'intitulé de l'épreuve.");
+                            return;
+                          }
+
+                          const classVal = formExamClass || defaultClasses[0];
+                          const supVal = formExamSupervisor || (displayTeachers[0] ? `${displayTeachers[0].prenom} ${displayTeachers[0].nom}` : 'Proviseur / Direction');
+
+                          try {
+                            await addDoc(collection(db, 'resp_lycee_mock_exams'), {
+                              name: formExamName,
+                              targetClass: classVal,
+                              serie: formExamSerie,
+                              date: formExamDate || new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+                              supervisor: supVal,
+                              status: 'planned',
+                              etablissement: activeEstId
+                            });
+                            setFormExamName('');
+                            setFormExamDate('');
+                            notifySuccess("Examen blanc / épreuve officielle planifiée !");
+                          } catch (err) {
+                            console.error("Error adding mock exam:", err);
+                          }
+                        }}
+                        className="space-y-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Intitulé de l'Épreuve</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Bac Blanc N°2 - Épreuve de Mathématiques"
+                            value={formExamName}
+                            onChange={(e) => setFormExamName(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400 block">Classe Cible</label>
+                            <select
+                              value={formExamClass}
+                              onChange={(e) => setFormExamClass(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            >
+                              {defaultClasses.map(cl => (
+                                <option key={cl} value={cl}>{cl}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400 block">Série / Filière</label>
+                            <select
+                              value={formExamSerie}
+                              onChange={(e) => setFormExamSerie(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            >
+                              <option value="Terminale Générale">Terminale Générale</option>
+                              <option value="Série Scientifique (S/C/D)">Série Scientifique (S/C/D)</option>
+                              <option value="Série Littéraire (L/A)">Série Littéraire (L/A)</option>
+                              <option value="Série Économique (ES/B)">Série Économique (ES/B)</option>
+                              <option value="Secondaire 1er Cycle (6e-3e)">Secondaire 1er Cycle (6e-3e)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400 block">Date de l'épreuve</label>
+                            <input
+                              type="text"
+                              placeholder="Ex: 14 Juin 2026"
+                              value={formExamDate}
+                              onChange={(e) => setFormExamDate(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400 block">Surveillant / Responsable</label>
+                            <select
+                              value={formExamSupervisor}
+                              onChange={(e) => setFormExamSupervisor(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            >
+                              <option value="Proviseur / Direction">Proviseur / Direction</option>
+                              {displayTeachers.map(t => (
+                                <option key={t.id} value={`${t.prenom} ${t.nom}`}>{t.prenom} {t.nom}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer"
+                        >
+                          Programmer Examen Blanc
+                        </button>
+                      </form>
+                    )}
+
+                    {/* Sub-form 2: Conseil de classe */}
+                    {lyceeFormType === 'council' && (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!enforcePermission('responsable_lycee')) return;
+
+                          const classVal = formCouncilClass || defaultClasses[0];
+
+                          try {
+                            await addDoc(collection(db, 'resp_lycee_councils'), {
+                              className: classVal,
+                              president: formCouncilPresident || 'Proviseur',
+                              date: formCouncilDate || new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+                              honors: Number(formCouncilHonors) || 0,
+                              warnings: Number(formCouncilWarnings) || 0,
+                              remarks: formCouncilRemarks || 'Conseil satisfaisant avec une bonne dynamique de travail.',
+                              status: 'held',
+                              etablissement: activeEstId
+                            });
+                            setFormCouncilRemarks('');
+                            notifySuccess("Procès-verbal de conseil de classe enregistré !");
+                          } catch (err) {
+                            console.error("Error adding council:", err);
+                          }
+                        }}
+                        className="space-y-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Classe Convoquée</label>
+                          <select
+                            value={formCouncilClass}
+                            onChange={(e) => setFormCouncilClass(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                          >
+                            {defaultClasses.map(cl => (
+                              <option key={cl} value={cl}>{cl}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400 block">Président de séance</label>
+                            <input
+                              type="text"
+                              value={formCouncilPresident}
+                              onChange={(e) => setFormCouncilPresident(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400 block">Date du conseil</label>
+                            <input
+                              type="text"
+                              placeholder="Ex: 28 Mai 2026"
+                              value={formCouncilDate}
+                              onChange={(e) => setFormCouncilDate(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-emerald-600 block">🌟 Félicitations / Honneurs</label>
+                            <input
+                              type="number"
+                              value={formCouncilHonors}
+                              onChange={(e) => setFormCouncilHonors(e.target.value)}
+                              className="w-full p-2 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-rose-600 block">⚠️ Avertissements Travail/Cond.</label>
+                            <input
+                              type="number"
+                              value={formCouncilWarnings}
+                              onChange={(e) => setFormCouncilWarnings(e.target.value)}
+                              className="w-full p-2 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Synthèse & Appréciation Globale</label>
+                          <textarea
+                            rows={2}
+                            placeholder="Trimestre honorable, félicitations aux élèves engagés..."
+                            value={formCouncilRemarks}
+                            onChange={(e) => setFormCouncilRemarks(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer"
+                        >
+                          Enregistrer Procès-Verbal
+                        </button>
+                      </form>
+                    )}
+
+                    {/* Sub-form 3: Orientation Post-Bac */}
+                    {lyceeFormType === 'postbac' && (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!enforcePermission('responsable_lycee')) return;
+
+                          const studentVal = formPostBacStudent || (displayStudents[0] ? `${displayStudents[0].prenom} ${displayStudents[0].nom}` : '');
+                          if (!studentVal) {
+                            notifyError("Veuillez sélectionner ou renseigner un élève.");
+                            return;
+                          }
+
+                          try {
+                            await addDoc(collection(db, 'resp_lycee_postbac'), {
+                              studentName: studentVal,
+                              serie: formPostBacSerie,
+                              targetProgram: formPostBacTarget || 'CPGE / Université',
+                              proviseurAdvice: formPostBacAdvice,
+                              etablissement: activeEstId
+                            });
+                            setFormPostBacStudent('');
+                            notifySuccess("Avis Proviseur pour l'orientation validé !");
+                          } catch (err) {
+                            console.error("Error adding postbac:", err);
+                          }
+                        }}
+                        className="space-y-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Élève de Terminale / Bac</label>
+                          {displayStudents.length > 0 ? (
+                            <select
+                              value={formPostBacStudent}
+                              onChange={(e) => setFormPostBacStudent(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            >
+                              <option value="">-- Choisir un élève --</option>
+                              {displayStudents.map(st => (
+                                <option key={st.id} value={`${st.prenom} ${st.nom}`}>
+                                  {st.prenom} {st.nom} ({st.classe || 'Lycée'})
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              placeholder="Ex: Jean-Luc Koffi"
+                              value={formPostBacStudent}
+                              onChange={(e) => setFormPostBacStudent(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            />
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Filière / École d'Enseignement Supérieur Visée</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: CPGE MPSI / Faculté de Médecine / EPAC"
+                            value={formPostBacTarget}
+                            onChange={(e) => setFormPostBacTarget(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Avis Officiel du Proviseur</label>
+                          <select
+                            value={formPostBacAdvice}
+                            onChange={(e) => setFormPostBacAdvice(e.target.value as any)}
+                            className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                          >
+                            <option value="Tres Favorable">🌟 Très Favorable</option>
+                            <option value="Favorable">👍 Favorable</option>
+                            <option value="Reserve">⚠️ Réservé</option>
+                          </select>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer"
+                        >
+                          Valider Fiche d'Orientation
+                        </button>
+                      </form>
+                    )}
+
+                    {/* Sub-form 4: Discipline Supérieure */}
+                    {lyceeFormType === 'discipline' && (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!enforcePermission('responsable_lycee')) return;
+
+                          const studentVal = formDiscStudent || (displayStudents[0] ? `${displayStudents[0].prenom} ${displayStudents[0].nom}` : '');
+                          if (!studentVal || !formDiscMotif.trim()) {
+                            notifyError("Veuillez renseigner le nom de l'élève et le motif.");
+                            return;
+                          }
+
+                          const classVal = formDiscClass || defaultClasses[0];
+
+                          try {
+                            await addDoc(collection(db, 'resp_lycee_discipline'), {
+                              studentName: studentVal,
+                              className: classVal,
+                              motif: formDiscMotif,
+                              sanction: formDiscSanction,
+                              etablissement: activeEstId
+                            });
+                            setFormDiscStudent('');
+                            setFormDiscMotif('');
+                            notifySuccess("Décision disciplinaire enregistrée au dossier du lycée !");
+                          } catch (err) {
+                            console.error("Error adding lycee discipline:", err);
+                          }
+                        }}
+                        className="space-y-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Élève Auditionné</label>
+                          {displayStudents.length > 0 ? (
+                            <select
+                              value={formDiscStudent}
+                              onChange={(e) => setFormDiscStudent(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            >
+                              <option value="">-- Choisir un élève --</option>
+                              {displayStudents.map(st => (
+                                <option key={st.id} value={`${st.prenom} ${st.nom}`}>
+                                  {st.prenom} {st.nom} ({st.classe || 'Lycée'})
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              placeholder="Ex: Alain Bado"
+                              value={formDiscStudent}
+                              onChange={(e) => setFormDiscStudent(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                            />
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Classe</label>
+                          <select
+                            value={formDiscClass}
+                            onChange={(e) => setFormDiscClass(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                          >
+                            {defaultClasses.map(cl => (
+                              <option key={cl} value={cl}>{cl}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Motif d'infraction</label>
+                          <textarea
+                            rows={2}
+                            placeholder="Fraude constatée, absentéisme injustifié répété..."
+                            value={formDiscMotif}
+                            onChange={(e) => setFormDiscMotif(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Sanction / Décision Proviseur</label>
+                          <select
+                            value={formDiscSanction}
+                            onChange={(e) => setFormDiscSanction(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 border rounded-xl dark:bg-gray-900 dark:border-gray-750 outline-none"
+                          >
+                            <option value="Avertissement solennel du Proviseur">Avertissement solennel du Proviseur</option>
+                            <option value="Blâme avec inscription au dossier scolaire">Blâme avec inscription au dossier scolaire</option>
+                            <option value="Exclusion temporaire de 3 jours">Exclusion temporaire de 3 jours</option>
+                            <option value="Travail d'intérêt général éducatif">Travail d'intérêt général éducatif</option>
+                            <option value="Convocation devant le Conseil de Discipline">Convocation devant le Conseil de Discipline</option>
+                          </select>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black uppercase text-[10px] tracking-wider transition-all cursor-pointer"
+                        >
+                          Émettre Sanction Officielle
                         </button>
                       </form>
                     )}
