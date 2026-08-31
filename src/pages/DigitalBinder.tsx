@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getAutomaticCoefficient } from '../utils/coefficientHelper';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -46,7 +46,15 @@ import {
   AlertCircle,
   HelpCircle,
   BookMarked,
-  GraduationCap
+  GraduationCap,
+  UploadCloud,
+  File,
+  FileSpreadsheet,
+  Image as ImageIcon,
+  Eye,
+  Paperclip,
+  CheckCircle,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -85,6 +93,45 @@ interface Student {
   retards?: number;
   parentEmail?: string;
   comportementPoints?: number;
+}
+
+// Binder Document Type
+export interface BinderDocument {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  dataUrl?: string;
+  classe: string;
+  matiere?: string;
+  uploadedBy: string;
+  uploadedByName: string;
+  createdAt: string;
+  etablissement: string;
+}
+
+// Parent Recipient Type
+export interface ParentRecipient {
+  id: string;
+  nom: string;
+  prenom: string;
+  email: string;
+  telephone?: string;
+  childrenNames?: string;
+  childrenClasses?: string;
+  childrenClassList: string[];
+}
+
+// Announcement Type
+export interface BinderAnnouncement {
+  id: string;
+  senderId: string;
+  senderName: string;
+  target: string;
+  targetLabel: string;
+  content: string;
+  date: string;
+  etablissement: string;
 }
 
 // Textbook Entry
@@ -141,6 +188,9 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
   // Data persistence lists
   const [classesList, setClassesList] = useState<string[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [parentsList, setParentsList] = useState<ParentRecipient[]>([]);
+  const [binderDocuments, setBinderDocuments] = useState<BinderDocument[]>([]);
+  const [sentAnnouncements, setSentAnnouncements] = useState<BinderAnnouncement[]>([]);
   const [textbookEntries, setTextbookEntries] = useState<TextbookEntry[]>([]);
   const [prepSequences, setPrepSequences] = useState<PrepSequence[]>([]);
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
@@ -152,6 +202,18 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
   const [showTextbookModal, setShowTextbookModal] = useState(false);
   const [showPrepModal, setShowPrepModal] = useState(false);
   const [showEvalModal, setShowEvalModal] = useState(false);
+  const [showUploadDocModal, setShowUploadDocModal] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<BinderDocument | null>(null);
+
+  // Document Upload Form State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFileDataUrl, setUploadFileDataUrl] = useState<string>('');
+  const [uploadDocName, setUploadDocName] = useState<string>('');
+  const [uploadDocClasse, setUploadDocClasse] = useState<string>('Toutes les classes');
+  const [uploadDocMatiere, setUploadDocMatiere] = useState<string>('Général');
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
   // Additional quick add modals for classroom real-time configuration
   const [showAddClassModal, setShowAddClassModal] = useState(false);
@@ -181,7 +243,7 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
       (snapshot) => {
         const schoolClasses = snapshot.docs
           .map(doc => doc.data() as any)
-          .filter((c: any) => c.etablissement === activeEstId)
+          .filter((c: any) => (c.etablissement || 'EDU-001') === activeEstId && !c.deleted)
           .map((c: any) => c.nom);
         
         const uniqueClasses = Array.from(new Set(schoolClasses)).filter(Boolean);
@@ -190,13 +252,17 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
       (error) => console.error("Error subscribing to classes:", error)
     );
 
-    // Subscribe to students (users where role === 'élève')
-    const unsubStudents = onSnapshot(
+    // Subscribe to students & parents (users collection)
+    const unsubUsers = onSnapshot(
       collection(db, 'users'),
       (snapshot) => {
-        const schoolStudents = snapshot.docs
+        const allEstUsers = snapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as any))
-          .filter((u: any) => u.etablissement === activeEstId && (u.role === 'élève' || u.role === 'eleve'))
+          .filter((u: any) => (u.etablissement || 'EDU-001') === activeEstId);
+
+        // Filter students
+        const schoolStudents = allEstUsers
+          .filter((u: any) => u.role === 'élève' || u.role === 'eleve')
           .map((u: any) => ({
             id: u.id,
             nom: u.nom || '',
@@ -209,8 +275,89 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
             comportementPoints: u.comportementPoints || 100
           }));
         setStudents(schoolStudents);
+
+        // Derive and match parents with their children
+        const parentUsers = allEstUsers.filter((u: any) => u.role === 'parent');
+        
+        // Also check if students have declared parents that might be in users or as contacts
+        const mappedParents: ParentRecipient[] = [];
+        const seenParentKeys = new Set<string>();
+
+        // 1. Registered parent users
+        parentUsers.forEach((p: any) => {
+          // Find children of this parent
+          const pChildren = schoolStudents.filter((s: any) => {
+            const hasIdMatch = p.enfant_ids?.includes(s.id) || p.children_ids?.includes(s.id);
+            const hasEmailMatch = (p.email && s.parentEmail && p.email.toLowerCase() === s.parentEmail.toLowerCase());
+            const hasNomMatch = p.nom && s.nom && p.nom.toLowerCase() === s.nom.toLowerCase();
+            return hasIdMatch || hasEmailMatch || hasNomMatch;
+          });
+
+          const childNames = pChildren.map((c: any) => `${c.prenom} ${c.nom}`).filter(Boolean).join(', ');
+          const childClasses = Array.from(new Set(pChildren.map((c: any) => c.classe).filter(Boolean))).join(', ');
+          const childClassList = Array.from(new Set(pChildren.map((c: any) => c.classe).filter(Boolean)));
+
+          const key = p.id || p.email;
+          if (!seenParentKeys.has(key)) {
+            seenParentKeys.add(key);
+            mappedParents.push({
+              id: p.id,
+              nom: p.nom || '',
+              prenom: p.prenom || '',
+              email: p.email || '',
+              telephone: p.telephone || p.phone || '',
+              childrenNames: childNames || p.enfants_noms || 'Élève assigné',
+              childrenClasses: childClasses || p.classe || 'Classe active',
+              childrenClassList: childClassList.length > 0 ? childClassList : (p.classe ? [p.classe] : [])
+            });
+          }
+        });
+
+        // 2. Parents identified directly from student profile details
+        schoolStudents.forEach((s: any) => {
+          if (s.parentEmail && !seenParentKeys.has(s.parentEmail.toLowerCase())) {
+            seenParentKeys.add(s.parentEmail.toLowerCase());
+            mappedParents.push({
+              id: `parent_${s.id}`,
+              nom: s.nom,
+              prenom: 'Parent',
+              email: s.parentEmail,
+              childrenNames: `${s.prenom} ${s.nom}`,
+              childrenClasses: s.classe,
+              childrenClassList: s.classe ? [s.classe] : []
+            });
+          }
+        });
+
+        setParentsList(mappedParents);
       },
-      (error) => console.error("Error subscribing to students:", error)
+      (error) => console.error("Error subscribing to users:", error)
+    );
+
+    // Subscribe to binder documents for active establishment
+    const unsubDocs = onSnapshot(
+      collection(db, 'binder_documents'),
+      (snapshot) => {
+        const docs = snapshot.docs
+          .map(d => ({ id: d.id, ...d.data() } as BinderDocument))
+          .filter(d => (d.etablissement || 'EDU-001') === activeEstId);
+        docs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        setBinderDocuments(docs);
+      },
+      (error) => console.error("Error subscribing to binder documents:", error)
+    );
+
+    // Subscribe to announcements
+    const unsubAnnouncements = onSnapshot(
+      collection(db, 'parent_announcements'),
+      (snapshot) => {
+        const list = snapshot.docs
+          .map(d => ({ id: d.id, ...d.data() } as BinderAnnouncement))
+          .filter(d => (d.etablissement || 'EDU-001') === activeEstId);
+        list.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+        setSentAnnouncements(list);
+      },
+      (error) => console.error("Error subscribing to announcements:", error)
     );
 
     // Subscribe to textbooks (filtered by teacherId)
@@ -269,7 +416,9 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
     return () => {
       unsubClasses();
-      unsubStudents();
+      unsubUsers();
+      unsubDocs();
+      unsubAnnouncements();
       unsubTextbooks();
       unsubPreparations();
       unsubEvaluations();
@@ -568,7 +717,8 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
             heure_arrivee: status === 'present' ? '08:00' : null,
             heure_depart: null,
             statut: mappedStatus,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            etablissement: activeEstId
           });
         } else {
           const docId = snap.docs[0].id;
@@ -661,14 +811,186 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
     }
   };
 
-  // Send communication parent
-  const handleSendMessage = () => {
-    if (!messageText) {
+  // File handling for Documents
+  const processSelectedFile = (file: File) => {
+    if (!file) return;
+    // Check max size (up to 15MB)
+    if (file.size > 15 * 1024 * 1024) {
+      notifyError('Le fichier est trop volumineux (maximum 15 Mo).');
+      return;
+    }
+
+    setUploadFile(file);
+    setUploadDocName(file.name);
+    
+    // Convert to data URL for storage & instant preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setUploadFileDataUrl(e.target?.result as string);
+      setShowUploadDocModal(true);
+    };
+    reader.onerror = () => {
+      notifyError('Erreur de lecture du fichier.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processSelectedFile(file);
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processSelectedFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleSaveDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile || !uploadFileDataUrl) {
+      notifyError('Veuillez sélectionner un fichier.');
+      return;
+    }
+
+    setUploadingDoc(true);
+    try {
+      await addDoc(collection(db, 'binder_documents'), {
+        name: uploadDocName.trim() || uploadFile.name,
+        size: uploadFile.size,
+        type: uploadFile.type || 'application/octet-stream',
+        dataUrl: uploadFileDataUrl,
+        classe: uploadDocClasse,
+        matiere: uploadDocMatiere,
+        uploadedBy: currentUser?.id || 'sys',
+        uploadedByName: `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() || 'Enseignant',
+        createdAt: new Date().toISOString(),
+        etablissement: activeEstId
+      });
+
+      notifySuccess(`Le document "${uploadDocName.trim() || uploadFile.name}" a été téléversé avec succès !`);
+      setShowUploadDocModal(false);
+      setUploadFile(null);
+      setUploadFileDataUrl('');
+      setUploadDocName('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error("Error saving document:", error);
+      notifyError("Erreur lors du téléversement du document.");
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId: string, docName: string) => {
+    try {
+      await deleteDoc(doc(db, 'binder_documents', docId));
+      notifySuccess(`Document "${docName}" supprimé.`);
+    } catch (error) {
+      console.error(error);
+      notifyError("Erreur lors de la suppression du document.");
+    }
+  };
+
+  const handleDownloadDocument = (docItem: BinderDocument) => {
+    if (!docItem.dataUrl) {
+      notifyError("Lien du document non disponible.");
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = docItem.dataUrl;
+    link.download = docItem.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    notifySuccess(`Téléchargement de "${docItem.name}" démarré.`);
+  };
+
+  // Helper format file size
+  const formatFileSize = (bytes: number) => {
+    if (!bytes || bytes === 0) return '0 Ko';
+    const k = 1024;
+    if (bytes < k) return `${bytes} o`;
+    if (bytes < k * k) return `${(bytes / k).toFixed(1)} Ko`;
+    return `${(bytes / (k * k)).toFixed(1)} Mo`;
+  };
+
+  // Helper file icon
+  const getFileIcon = (fileName: string, fileType: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    if (ext === 'pdf' || fileType.includes('pdf')) {
+      return <span className="text-2xl">📄</span>;
+    }
+    if (['xls', 'xlsx', 'csv'].includes(ext) || fileType.includes('spreadsheet') || fileType.includes('excel')) {
+      return <span className="text-2xl">📊</span>;
+    }
+    if (['doc', 'docx'].includes(ext) || fileType.includes('word') || fileType.includes('document')) {
+      return <span className="text-2xl">📝</span>;
+    }
+    if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext) || fileType.includes('image')) {
+      return <span className="text-2xl">🖼️</span>;
+    }
+    if (['ppt', 'pptx'].includes(ext) || fileType.includes('presentation')) {
+      return <span className="text-2xl">📑</span>;
+    }
+    return <span className="text-2xl">📁</span>;
+  };
+
+  // Send communication parent in real-time
+  const handleSendMessage = async () => {
+    if (!messageText.trim()) {
       notifyError('Le message ne peut pas être vide.');
       return;
     }
-    notifySuccess('Message groupé envoyé avec succès aux destinataires sélectionnés.');
-    setMessageText('');
+
+    try {
+      let targetLabel = "Tous les parents de mes classes";
+      if (messageTarget === 'all_parents') {
+        targetLabel = `Tous les parents de l'établissement (${parentsList.length} parents)`;
+      } else if (messageTarget.startsWith('class_')) {
+        const className = messageTarget.replace('class_', '');
+        targetLabel = `Tous les parents de la classe ${className}`;
+      } else if (messageTarget.startsWith('parent_')) {
+        const parentId = messageTarget.replace('parent_', '');
+        const parentObj = parentsList.find(p => p.id === parentId || `parent_${p.id}` === messageTarget);
+        if (parentObj) {
+          targetLabel = `${parentObj.prenom} ${parentObj.nom} (Parent de ${parentObj.childrenNames || 'élève'})`;
+        }
+      }
+
+      await addDoc(collection(db, 'parent_announcements'), {
+        senderId: currentUser?.id || 'sys',
+        senderName: `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() || 'Enseignant / Responsable',
+        target: messageTarget,
+        targetLabel,
+        content: messageText.trim(),
+        date: new Date().toISOString(),
+        etablissement: activeEstId
+      });
+
+      notifySuccess(`Message diffusé avec succès vers : ${targetLabel}`);
+      setMessageText('');
+    } catch (error) {
+      console.error("Error sending announcement:", error);
+      notifyError("Erreur lors de l'envoi du message.");
+    }
   };
 
   // Filter students based on search query
@@ -1527,43 +1849,143 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                 {/* MODULE 10: Documents */}
                 {activeModule === 'documents' && (
                   <div className="space-y-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {/* Document Categories */}
-                      <div className="p-4 rounded-xl border border-gray-150 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">
-                        <span className="block text-2xl mb-1">📐</span>
-                        <h4 className="text-xs font-black text-gray-900 dark:text-white">Géométrie_Fiches.pdf</h4>
-                        <span className="text-[10px] text-gray-400">1.4 Mo • 3ème A</span>
-                        <button
-                          onClick={() => notifySuccess('Téléchargement du cours démarré')}
-                          className="mt-3 block w-full py-1.5 bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 border border-indigo-150 dark:border-indigo-900/55 rounded-lg text-[10px] font-black"
-                        >
-                          Télécharger
-                        </button>
+                    {/* Upload Dropzone & Button */}
+                    <div 
+                      onDragEnter={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDragOver={handleDrag}
+                      onDrop={handleDrop}
+                      className={`p-6 rounded-2xl border-2 border-dashed transition-all text-center ${
+                        dragActive 
+                          ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 ring-4 ring-indigo-500/10' 
+                          : 'border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/60 hover:border-indigo-400'
+                      }`}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        id="document-file-input"
+                        className="hidden"
+                        onChange={handleFileSelect}
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt,.csv"
+                      />
+                      
+                      <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-xs">
+                        <UploadCloud size={24} />
+                      </div>
+                      
+                      <h4 className="text-sm font-black text-gray-900 dark:text-white mb-1">
+                        Ajouter un document au classeur
+                      </h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-4">
+                        Glissez-déposez un fichier ici ou parcourez les dossiers de votre appareil (PDF, Word, Excel, Images jusqu'à 15 Mo).
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
+                      >
+                        <FolderOpen size={16} />
+                        Parcourir mon appareil
+                      </button>
+                    </div>
+
+                    {/* Uploaded Documents List */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider flex items-center gap-2">
+                          <FileText size={14} className="text-indigo-600" />
+                          Documents enregistrés ({binderDocuments.length})
+                        </h3>
+                        <span className="text-[11px] text-gray-400">
+                          Établissement : {currentEstablishment?.nom || activeEstId}
+                        </span>
                       </div>
 
-                      <div className="p-4 rounded-xl border border-gray-150 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">
-                        <span className="block text-2xl mb-1">🔢</span>
-                        <h4 className="text-xs font-black text-gray-900 dark:text-white">Matrices_Et_Suites.pdf</h4>
-                        <span className="text-[10px] text-gray-400">3.2 Mo • Terminale S</span>
-                        <button
-                          onClick={() => notifySuccess('Téléchargement du cours démarré')}
-                          className="mt-3 block w-full py-1.5 bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 border border-indigo-150 dark:border-indigo-900/55 rounded-lg text-[10px] font-black"
-                        >
-                          Télécharger
-                        </button>
-                      </div>
+                      {binderDocuments.length === 0 ? (
+                        <div className="p-8 rounded-2xl border border-gray-150 dark:border-gray-700 bg-white dark:bg-gray-800 text-center">
+                          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400">
+                            <FolderOpen size={22} />
+                          </div>
+                          <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                            Aucun document téléversé
+                          </h4>
+                          <p className="text-[11px] text-gray-400 max-w-sm mx-auto">
+                            Utilisez le bouton ci-dessus pour téléverser votre premier cours, fiche d'exercice ou support de révision depuis votre appareil.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {binderDocuments.map((docItem) => (
+                            <div 
+                              key={docItem.id} 
+                              className="p-4 rounded-xl border border-gray-150 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col justify-between hover:shadow-md transition-shadow relative group"
+                            >
+                              <div>
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                  <div className="flex items-center gap-2.5">
+                                    {getFileIcon(docItem.name, docItem.type)}
+                                    <div className="min-w-0">
+                                      <h4 
+                                        className="text-xs font-black text-gray-900 dark:text-white truncate max-w-[180px]" 
+                                        title={docItem.name}
+                                      >
+                                        {docItem.name}
+                                      </h4>
+                                      <span className="text-[10px] text-gray-400 block">
+                                        {formatFileSize(docItem.size)} • {docItem.classe || 'Général'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <button
+                                    onClick={() => handleDeleteDocument(docItem.id, docItem.name)}
+                                    title="Supprimer ce document"
+                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
 
-                      <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 flex flex-col justify-center items-center text-center">
-                        <Plus size={24} className="text-indigo-600 mb-1" />
-                        <h4 className="text-xs font-black text-gray-700 dark:text-gray-300">Nouveau Document</h4>
-                        <span className="text-[10px] text-gray-400">Glisser-déposer un fichier</span>
-                        <button
-                          onClick={() => notifyInfo('Sélection de fichier ouverte')}
-                          className="mt-3 py-1 px-3 bg-indigo-55 text-white bg-indigo-600 rounded-lg text-[10px] font-bold hover:bg-indigo-700"
-                        >
-                          Parcourir
-                        </button>
-                      </div>
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                  {docItem.matiere && (
+                                    <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[9px] font-bold">
+                                      {docItem.matiere}
+                                    </span>
+                                  )}
+                                  <span className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-[9px]">
+                                    Ajouté par {docItem.uploadedByName}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-750 flex items-center justify-between gap-2">
+                                <span className="text-[9px] text-gray-400">
+                                  {new Date(docItem.createdAt).toLocaleDateString('fr-FR')}
+                                </span>
+                                
+                                <div className="flex gap-1.5">
+                                  {docItem.dataUrl && (
+                                    <button
+                                      onClick={() => setPreviewDoc(docItem)}
+                                      className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                    >
+                                      <Eye size={12} /> Aperçu
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleDownloadDocument(docItem)}
+                                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black flex items-center gap-1 shadow-xs transition-colors"
+                                  >
+                                    <Download size={12} /> Télécharger
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1571,41 +1993,129 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                 {/* MODULE 11: Messagerie */}
                 {activeModule === 'messaging' && (
                   <div className="space-y-6">
-                    <div className="p-4 border border-gray-150 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 space-y-4">
-                      <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider">Message groupé aux parents d'élèves</h3>
+                    <div className="p-5 border border-gray-150 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-800 space-y-4 shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-750 pb-3">
+                        <div>
+                          <h3 className="text-sm font-black text-gray-900 dark:text-white flex items-center gap-2">
+                            <MessageCircle size={16} className="text-indigo-600" />
+                            Messagerie & Communications Parents
+                          </h3>
+                          <p className="text-[11px] text-gray-400">
+                            Diffusez des annonces, convocations ou alertes aux parents d'élèves en temps réel pour l'établissement.
+                          </p>
+                        </div>
+                        <div className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-[10px] font-bold self-start sm:self-auto">
+                          {parentsList.length} parents répertoriés
+                        </div>
+                      </div>
                       
+                      {/* Destination Selector with Dynamic Parents & Classes */}
                       <div>
-                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Destinataires</label>
+                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">
+                          Destinataires (Filtre par Établissement et Classes Créées)
+                        </label>
                         <select
                           value={messageTarget}
                           onChange={(e) => setMessageTarget(e.target.value)}
-                          className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white"
+                          className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
                         >
-                          <option value="all_parents">Tous les parents de mes classes</option>
-                          <option value="term_s_parents">Parents de Terminale S uniquement</option>
-                          <option value="3eme_parents">Parents de 3ème A uniquement</option>
+                          <optgroup label="Diffusion Globale">
+                            <option value="all_parents">
+                              📢 Tous les parents de l'établissement ({parentsList.length} parents)
+                            </option>
+                          </optgroup>
+
+                          {classesList.length > 0 && (
+                            <optgroup label="Par Classe de l'Établissement">
+                              {classesList.map(classeName => {
+                                const countInClass = parentsList.filter(p => p.childrenClassList.includes(classeName)).length;
+                                return (
+                                  <option key={`class_${classeName}`} value={`class_${classeName}`}>
+                                    🏫 Parents des élèves de {classeName} ({countInClass} parent{countInClass > 1 ? 's' : ''})
+                                  </option>
+                                );
+                              })}
+                            </optgroup>
+                          )}
+
+                          {parentsList.length > 0 && (
+                            <optgroup label="Parents Individuels">
+                              {parentsList.map(parent => (
+                                <option key={parent.id} value={`parent_${parent.id}`}>
+                                  👤 {parent.nom} {parent.prenom} {parent.childrenNames ? `(Parent de : ${parent.childrenNames} - ${parent.childrenClasses})` : `(${parent.email})`}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
                         </select>
                       </div>
 
                       <div>
-                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Contenu du message d'alerte ou d'annonce</label>
+                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">
+                          Contenu du message d'alerte, de convocation ou d'annonce
+                        </label>
                         <textarea
                           rows={4}
                           value={messageText}
                           onChange={(e) => setMessageText(e.target.value)}
-                          placeholder="Bonjour chers parents, je vous informe qu'une évaluation de Mathématiques est prévue..."
-                          className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                          placeholder="Bonjour chers parents, je vous informe qu'une évaluation ou une réunion pédagogique est prévue..."
+                          className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none leading-relaxed"
                         />
                       </div>
 
-                      <div className="flex justify-end">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                        <span className="text-[11px] text-gray-400">
+                          {messageText.length} caractères saisis
+                        </span>
                         <button
+                          type="button"
                           onClick={handleSendMessage}
-                          className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 flex items-center gap-2"
+                          className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all"
                         >
                           <Send size={14} /> Envoyer aux parents
                         </button>
                       </div>
+                    </div>
+
+                    {/* Historical Sent Announcements */}
+                    <div className="border border-gray-150 dark:border-gray-700 rounded-2xl p-5 bg-white dark:bg-gray-800">
+                      <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-4 flex items-center gap-2">
+                        <Clock size={14} className="text-indigo-600" />
+                        Historique des messages diffusés ({sentAnnouncements.length})
+                      </h3>
+
+                      {sentAnnouncements.length === 0 ? (
+                        <div className="text-center py-6 text-gray-400 text-xs">
+                          Aucun message diffusé récemment dans cet établissement.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {sentAnnouncements.map((item) => (
+                            <div key={item.id} className="p-3.5 bg-gray-50 dark:bg-gray-750 rounded-xl border border-gray-100 dark:border-gray-700 space-y-1.5">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-[11px] font-black text-indigo-600 dark:text-indigo-400">
+                                  {item.targetLabel || item.target}
+                                </span>
+                                <span className="text-[10px] text-gray-400">
+                                  {new Date(item.date).toLocaleDateString('fr-FR', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                                {item.content}
+                              </p>
+                              <span className="text-[9px] text-gray-400 block pt-1">
+                                Émis par : {item.senderName}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2043,6 +2553,188 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                   Créer la classe
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD DOCUMENT MODAL */}
+      {showUploadDocModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative border border-gray-100 dark:border-gray-700">
+            <button
+              onClick={() => {
+                setShowUploadDocModal(false);
+                setUploadFile(null);
+                setUploadFileDataUrl('');
+              }}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 rounded-lg"
+            >
+              <X size={20} />
+            </button>
+            
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <FileText size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-gray-900 dark:text-white">
+                  Téléverser le Document
+                </h3>
+                <p className="text-xs text-gray-400">
+                  Associez ce fichier à une classe et une matière
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveDocument} className="space-y-4">
+              <div className="p-3 bg-gray-50 dark:bg-gray-750 rounded-xl border border-gray-150 dark:border-gray-700 flex items-center gap-3">
+                {uploadFile && getFileIcon(uploadFile.name, uploadFile.type)}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-black text-gray-900 dark:text-white truncate">
+                    {uploadFile?.name}
+                  </p>
+                  <p className="text-[10px] text-gray-400">
+                    {uploadFile && formatFileSize(uploadFile.size)}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">
+                  Titre / Nom du document
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={uploadDocName}
+                  onChange={(e) => setUploadDocName(e.target.value)}
+                  placeholder="ex: Fiche révision géométrie dans l'espace"
+                  className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">
+                    Classe Destinataire
+                  </label>
+                  <select
+                    value={uploadDocClasse}
+                    onChange={(e) => setUploadDocClasse(e.target.value)}
+                    className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  >
+                    <option value="Toutes les classes">Toutes les classes</option>
+                    {classesList.map(cl => (
+                      <option key={cl} value={cl}>{cl}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">
+                    Matière / Discipline
+                  </label>
+                  <input
+                    type="text"
+                    value={uploadDocMatiere}
+                    onChange={(e) => setUploadDocMatiere(e.target.value)}
+                    placeholder="ex: Mathématiques, Histoire"
+                    className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-750">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUploadDocModal(false);
+                    setUploadFile(null);
+                    setUploadFileDataUrl('');
+                  }}
+                  className="px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-bold"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadingDoc}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 flex items-center gap-2"
+                >
+                  {uploadingDoc ? 'Téléversement...' : 'Confirmer et Ajouter'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* PREVIEW DOCUMENT MODAL */}
+      {previewDoc && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-850 rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="p-4 border-b border-gray-150 dark:border-gray-750 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                {getFileIcon(previewDoc.name, previewDoc.type)}
+                <div>
+                  <h3 className="text-sm font-black text-gray-900 dark:text-white truncate max-w-md">
+                    {previewDoc.name}
+                  </h3>
+                  <span className="text-[10px] text-gray-400">
+                    {formatFileSize(previewDoc.size)} • {previewDoc.classe}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownloadDocument(previewDoc)}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs"
+                >
+                  <Download size={13} /> Télécharger
+                </button>
+                <button
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-white rounded-lg"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 p-4 overflow-auto flex items-center justify-center bg-gray-100 dark:bg-gray-900 min-h-[350px]">
+              {previewDoc.type.includes('image') ? (
+                <img 
+                  src={previewDoc.dataUrl} 
+                  alt={previewDoc.name} 
+                  className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-sm"
+                />
+              ) : previewDoc.type.includes('pdf') ? (
+                <iframe
+                  src={previewDoc.dataUrl}
+                  title={previewDoc.name}
+                  className="w-full h-[60vh] rounded-lg border border-gray-300 dark:border-gray-700"
+                />
+              ) : (
+                <div className="text-center p-8">
+                  <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                    <FileText size={32} />
+                  </div>
+                  <h4 className="text-sm font-black text-gray-800 dark:text-gray-200 mb-1">
+                    Aperçu intégré non disponible pour ce format
+                  </h4>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Veuillez télécharger le document pour le consulter sur votre appareil.
+                  </p>
+                  <button
+                    onClick={() => handleDownloadDocument(previewDoc)}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black inline-flex items-center gap-2"
+                  >
+                    <Download size={14} /> Télécharger le fichier
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
