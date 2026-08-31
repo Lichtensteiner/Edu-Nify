@@ -106,7 +106,6 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
         { id: 'strategic_optimizations', labelKey: 'strategic_optimizations', icon: Sparkles, roles: ['admin', 'enseignant'] },
         { id: 'recent_connections', labelKey: 'recent_connections', icon: Activity, roles: ['admin'] },
         { id: 'audit_logs', labelKey: 'audit_logs', icon: History, roles: ['admin'] },
-        { id: 'integration', labelKey: 'integration', icon: Code, roles: ['admin'] },
         { id: 'dossiers_agents', labelKey: 'dossiers_agents', icon: FileText, roles: ['admin'] },
         { id: 'tech_sheet', labelKey: 'tech_sheet', icon: Cpu, roles: ['admin'] },
         { id: 'settings', labelKey: 'settings', icon: Settings, roles: ['admin', 'enseignant', 'personnel administratif', 'parent', 'cuisinier', 'élève'] },
@@ -179,7 +178,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
           {categories.map((category, idx) => {
             const filteredItems = category.items
               .filter(item => {
-                if (item.id === 'dossiers_agents' && !isSuperAdmin) {
+                if ((item.id === 'dossiers_agents' || item.id === 'tech_sheet' || item.id === 'integration') && !isSuperAdmin) {
                   return false;
                 }
 
