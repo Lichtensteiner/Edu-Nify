@@ -1,994 +1,633 @@
 import React, { useState, useEffect } from 'react';
+import { 
+  collection, 
+  query, 
+  onSnapshot, 
+  orderBy, 
+  addDoc, 
+  deleteDoc, 
+  doc, 
+  serverTimestamp 
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { 
+  UserPlus, 
+  Sparkles, 
+  X, 
+  Megaphone, 
+  AlertTriangle, 
+  Plus, 
+  Trash2, 
+  Building2, 
+  ShieldCheck, 
+  Radio, 
+  Layers
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 import { useNotification } from '../contexts/NotificationContext';
-import { collection, query, where, getDocs, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc, increment, setDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { Search, Users, User, Megaphone, Send, Clock, Image, Video, Paperclip, Smile, ChevronRight, MessageCircle, MoreVertical, Trash2, LogOut, Eye, X } from 'lucide-react';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import Chat from './Chat';
-import { createNotification, notifyAllUsers } from '../services/NotificationService';
+import { motion, AnimatePresence } from 'motion/react';
 
-interface Conversation {
+export interface FlashItem {
   id: string;
-  participants: string[];
-  lastMessage: string;
-  lastMessageTime: any;
-  isGroup: boolean;
-  groupName?: string;
-  unreadCounts?: Record<string, number>;
-  createdBy?: string;
+  source: 'announcement' | 'user' | 'alert';
+  title?: string;
+  text: string;
+  authorName?: string;
+  authorRole?: string;
+  etablissementId: string;
+  etablissementNom?: string;
+  date?: any;
+  type?: 'flash' | 'urgent' | 'info' | 'event' | 'registration';
+  role?: string;
 }
 
-interface MessagingProps {
-  initialChatTargetId?: string;
-  onClearTarget?: () => void;
-}
-
-export default function Messaging({ initialChatTargetId, onClearTarget }: MessagingProps) {
+export default function NewUserAnnouncement() {
   const { currentUser } = useAuth();
   const { t, tData } = useLanguage();
+  const { currentEstablishment, activeEstablishmentId, establishments, isSuperAdmin } = useEstablishment();
   const { notifySuccess, notifyError } = useNotification();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [usersInfo, setUsersInfo] = useState<Record<string, any>>({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeModal, setActiveModal] = useState<'newGroup' | 'groupMessage' | 'announcement' | null>(null);
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [groupName, setGroupName] = useState('');
-  const [groupMessageText, setGroupMessageText] = useState('');
-  const [announcementText, setAnnouncementText] = useState('');
-  const [isSubmittingAnnouncement, setIsSubmittingAnnouncement] = useState(false);
-  const [activeTab, setActiveTab] = useState<'conversations' | 'monitoring'>('conversations');
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [viewingMembersGroup, setViewingMembersGroup] = useState<Conversation | null>(null);
 
-  // Fetch all users for main list and modals
+  const [flashItems, setFlashItems] = useState<FlashItem[]>([]);
+  const [visible, setVisible] = useState(true);
+  const [superAdminViewMode, setSuperAdminViewMode] = useState<'selected' | 'all'>('selected');
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  // New announcement form state
+  const [newText, setNewText] = useState('');
+  const [newType, setNewType] = useState<'flash' | 'urgent' | 'info' | 'event'>('flash');
+  const [targetEstId, setTargetEstId] = useState<string>(activeEstablishmentId || 'EDU-001');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Determine effective establishment for standard users
+  const effectiveEstId = isSuperAdmin
+    ? (superAdminViewMode === 'all' ? 'ALL' : (activeEstablishmentId || currentEstablishment?.id || 'EDU-001'))
+    : (currentUser?.etablissement || currentEstablishment?.id || 'EDU-001');
+
+  // Update targetEstId when activeEstablishment changes
   useEffect(() => {
-    if (!currentUser) return;
-    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-      let usersData: any[] = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(u => u.id !== currentUser.id);
-      
-      // Parents can only message staff and admins
-      if (currentUser.role === 'parent') {
-        usersData = usersData.filter(u => ['admin', 'enseignant', 'personnel administratif'].includes(u.role));
-      }
-      
-      // Sort users: online first, then alphabetically
-      usersData.sort((a, b) => {
-        if (a.status === 'online' && b.status !== 'online') return -1;
-        if (a.status !== 'online' && b.status === 'online') return 1;
-        const nameA = `${a.prenom || ''} ${a.nom || ''}`.trim().toLowerCase() || a.email?.split('@')[0].toLowerCase() || 'utilisateur';
-        const nameB = `${b.prenom || ''} ${b.nom || ''}`.trim().toLowerCase() || b.email?.split('@')[0].toLowerCase() || 'utilisateur';
-        return nameA.localeCompare(nameB);
-      });
-      
-      setAllUsers(usersData);
-    });
-    return () => unsubscribe();
-  }, [currentUser]);
-
-  // Handle initialChatTargetId
-  useEffect(() => {
-    if (!initialChatTargetId || !currentUser) return;
-
-    const startChat = async () => {
-      // Check if conversation already exists in DB
-      const q = query(
-        collection(db, 'conversations'),
-        where('participants', 'array-contains', currentUser.id)
-      );
-      const snapshot = await getDocs(q);
-      const existingConv = snapshot.docs.find(doc => {
-        const data = doc.data();
-        return !data.isGroup && data.participants.includes(initialChatTargetId);
-      });
-
-      if (existingConv) {
-        setSelectedConversationId(existingConv.id);
-        window.history.pushState({ modal: 'chat' }, '');
-      } else {
-        // Create new conversation
-        try {
-          const newConvRef = await addDoc(collection(db, 'conversations'), {
-            participants: [currentUser.id, initialChatTargetId],
-            isGroup: false,
-            lastMessage: '',
-            lastMessageTime: serverTimestamp(),
-            createdAt: serverTimestamp(),
-            unreadCounts: {
-              [currentUser.id]: 0,
-              [initialChatTargetId]: 0
-            }
-          });
-          setSelectedConversationId(newConvRef.id);
-          window.history.pushState({ modal: 'chat' }, '');
-        } catch (error) {
-          console.error("Error creating conversation:", error);
-        }
-      }
-      if (onClearTarget) onClearTarget();
-    };
-
-    startChat();
-  }, [initialChatTargetId, currentUser, onClearTarget]);
-
-  // Update usersInfo when allUsers changes
-  useEffect(() => {
-    if (allUsers.length > 0) {
-      const infoMap: Record<string, any> = {};
-      allUsers.forEach(u => {
-        infoMap[u.id] = u;
-      });
-      setUsersInfo(prev => ({ ...prev, ...infoMap }));
+    if (activeEstablishmentId) {
+      setTargetEstId(activeEstablishmentId);
     }
-  }, [allUsers]);
+  }, [activeEstablishmentId]);
 
+  // Subscribe to real-time announcements & recent users with strict tenant isolation
   useEffect(() => {
-    if (!currentUser) return;
+    // 1. Listen to announcements collection
+    const unsubAnnouncements = onSnapshot(
+      collection(db, 'announcements'),
+      (snapshot) => {
+        const rawAnnouncements = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        })) as any[];
 
-    // Fetch conversations
-    let q;
-    if (currentUser.role === 'admin') {
-      q = collection(db, 'conversations');
-    } else {
-      q = query(
-        collection(db, 'conversations'),
-        where('participants', 'array-contains', currentUser.id)
-      );
-    }
+        // 2. Listen to users collection for recent registrations
+        const unsubUsers = onSnapshot(
+          collection(db, 'users'),
+          (userSnapshot) => {
+            const rawUsers = userSnapshot.docs.map(d => ({
+              id: d.id,
+              ...d.data()
+            })) as any[];
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const convos = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data({ serverTimestamps: 'estimate' })
-      })) as Conversation[];
-      
-      // Sort client-side to avoid requiring a composite index
-      convos.sort((a, b) => {
-        const timeA = a.lastMessageTime?.toMillis?.() || 0;
-        const timeB = b.lastMessageTime?.toMillis?.() || 0;
-        return timeB - timeA;
-      });
-      
-      setConversations(convos);
-    });
+            // Compute 48 hours cutoff for new users
+            const twoDaysAgo = new Date();
+            twoDaysAgo.setHours(twoDaysAgo.getHours() - 48);
+            const cutoffTime = twoDaysAgo.getTime();
 
-    return () => unsubscribe();
-  }, [currentUser]);
+            const items: FlashItem[] = [];
 
-  const filteredUsers = allUsers.filter(user => {
-    if (!searchQuery) return true;
-    const fullName = `${user.prenom || ''} ${user.nom || ''}`.trim().toLowerCase() || user.email?.split('@')[0].toLowerCase() || 'utilisateur';
-    return fullName.includes(searchQuery.toLowerCase());
-  }).sort((a, b) => {
-    const convA = conversations.find(c => !c.isGroup && c.participants.includes(a.id));
-    const convB = conversations.find(c => !c.isGroup && c.participants.includes(b.id));
-    
-    const timeA = convA?.lastMessageTime?.toMillis?.() || 0;
-    const timeB = convB?.lastMessageTime?.toMillis?.() || 0;
-    
-    if (timeA !== timeB) {
-      return timeB - timeA; // Most recent first
-    }
-    
-    if (a.status === 'online' && b.status !== 'online') return -1;
-    if (a.status !== 'online' && b.status === 'online') return 1;
-    
-    const nameA = `${a.prenom || ''} ${a.nom || ''}`.trim().toLowerCase() || a.email?.split('@')[0].toLowerCase() || 'utilisateur';
-    const nameB = `${b.prenom || ''} ${b.nom || ''}`.trim().toLowerCase() || b.email?.split('@')[0].toLowerCase() || 'utilisateur';
-    return nameA.localeCompare(nameB);
-  });
+            // A) Process Announcements with Multi-Tenant Isolation
+            rawAnnouncements.forEach((ann) => {
+              const annEst = ann.etablissement || 'EDU-001';
+              const isGlobal = ann.etablissement === 'ALL';
 
-  const groupConversations = conversations.filter(conv => conv.isGroup && (!searchQuery || conv.groupName?.toLowerCase().includes(searchQuery.toLowerCase())));
+              // Isolation rule:
+              // - Super Admin: if 'all', sees all. If 'selected', sees matching or global.
+              // - Standard user: MUST strictly match user's establishment or global!
+              let matches = false;
+              if (isSuperAdmin) {
+                if (superAdminViewMode === 'all') {
+                  matches = true;
+                } else {
+                  matches = annEst === effectiveEstId || isGlobal;
+                }
+              } else {
+                matches = annEst === effectiveEstId || isGlobal;
+              }
 
-  const studentConversations = conversations.filter(conv => {
-    if (conv.isGroup) return false;
-    // Check if all participants are students
-    return conv.participants.every(pId => {
-      const user = allUsers.find(u => u.id === pId) || (pId === currentUser?.id ? currentUser : null);
-      return user?.role === 'élève';
-    });
-  });
+              if (matches && ann.text && !ann.deleted && ann.active !== false) {
+                const estObj = establishments.find(e => e.id === annEst);
+                items.push({
+                  id: `ann-${ann.id}`,
+                  source: 'announcement',
+                  title: ann.title,
+                  text: ann.text,
+                  authorName: ann.authorName || 'Direction',
+                  authorRole: ann.authorRole,
+                  etablissementId: annEst,
+                  etablissementNom: isGlobal ? 'Tous Établissements' : (estObj?.nom || annEst),
+                  date: ann.createdAt || ann.date,
+                  type: ann.type || 'flash'
+                });
+              }
+            });
 
-  useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      if (event.state && event.state.modal === 'chat') {
-        // Chat is open
-      } else {
-        setSelectedConversationId(null);
-      }
-    };
+            // B) Process Recent Users Registrations with Multi-Tenant Isolation
+            rawUsers.forEach((u) => {
+              const userEst = u.etablissement || 'EDU-001';
+              let matches = false;
+              if (isSuperAdmin) {
+                if (superAdminViewMode === 'all') {
+                  matches = true;
+                } else {
+                  matches = userEst === effectiveEstId;
+                }
+              } else {
+                matches = userEst === effectiveEstId;
+              }
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+              // Check if user registration is recent (within 48 hours)
+              let isRecent = false;
+              if (u.date_creation) {
+                const userDate = new Date(u.date_creation).getTime();
+                if (!isNaN(userDate) && userDate >= cutoffTime) {
+                  isRecent = true;
+                }
+              }
 
-  const handleStartDirectChat = async (userId: string) => {
-    if (!currentUser) return;
-    
-    // First check local state
-    let existingConv = conversations.find(c => 
-      !c.isGroup && c.participants.includes(userId)
+              if (matches && isRecent && (u.prenom || u.nom)) {
+                const estObj = establishments.find(e => e.id === userEst);
+                items.push({
+                  id: `usr-${u.id}`,
+                  source: 'user',
+                  text: `Nouvelle inscription : ${u.prenom || ''} ${u.nom || ''} (${tData ? tData(u.role || 'eleve') : u.role})`,
+                  authorName: `${u.prenom || ''} ${u.nom || ''}`.trim(),
+                  etablissementId: userEst,
+                  etablissementNom: estObj?.nom || userEst,
+                  date: u.date_creation,
+                  type: 'registration',
+                  role: u.role
+                });
+              }
+            });
+
+            // Sort: Urgent & Flash announcements first, then recent
+            items.sort((a, b) => {
+              if (a.type === 'urgent' && b.type !== 'urgent') return -1;
+              if (b.type === 'urgent' && a.type !== 'urgent') return 1;
+              return 0;
+            });
+
+            setFlashItems(items);
+          },
+          (err) => console.error("Error listening to users for Flash Info:", err)
+        );
+
+        return () => unsubUsers();
+      },
+      (err) => console.error("Error listening to announcements:", err)
     );
 
-    // If not found locally, query the database to be absolutely sure
-    if (!existingConv) {
-      const q = query(
-        collection(db, 'conversations'),
-        where('participants', 'array-contains', currentUser.id)
-      );
-      const snapshot = await getDocs(q);
-      existingConv = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Conversation)).find(c => 
-        !c.isGroup && c.participants.includes(userId)
-      );
-    }
+    return () => unsubAnnouncements();
+  }, [effectiveEstId, isSuperAdmin, superAdminViewMode, establishments, tData]);
 
-    if (existingConv) {
-      setSelectedConversationId(existingConv.id);
-      window.history.pushState({ modal: 'chat' }, '');
-    } else {
-      try {
-        const newConvRef = await addDoc(collection(db, 'conversations'), {
-          participants: [currentUser.id, userId],
-          isGroup: false,
-          lastMessage: '',
-          lastMessageTime: serverTimestamp(),
-          createdAt: serverTimestamp(),
-          unreadCounts: {
-            [currentUser.id]: 0,
-            [userId]: 0
-          }
-        });
-        setSelectedConversationId(newConvRef.id);
-        window.history.pushState({ modal: 'chat' }, '');
-      } catch (error) {
-        console.error("Error creating conversation:", error);
-      }
-    }
-    setActiveModal(null);
-  };
+  // Handle Quick Add Announcement
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newText.trim() || !currentUser) return;
 
-  const handleBackFromChat = () => {
-    setSelectedConversationId(null);
-    if (window.history.state?.modal === 'chat') {
-      window.history.back();
-    }
-  };
-
-  const handleCreateGroup = async () => {
-    if (!currentUser || !groupName.trim() || selectedUsers.length === 0) return;
+    setIsSubmitting(true);
     try {
-      const unreadCounts: Record<string, number> = {};
-      [currentUser.id, ...selectedUsers].forEach(id => {
-        unreadCounts[id] = 0;
-      });
+      const senderName = currentUser.prenom || currentUser.nom
+        ? `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim()
+        : currentUser.email?.split('@')[0] || 'Admin';
 
-      const newConvRef = await addDoc(collection(db, 'conversations'), {
-        participants: [currentUser.id, ...selectedUsers],
-        isGroup: true,
-        groupName: groupName.trim(),
-        lastMessage: '',
-        lastMessageTime: serverTimestamp(),
-        createdAt: serverTimestamp(),
-        unreadCounts,
-        createdBy: currentUser.id
-      });
-      setSelectedConversationId(newConvRef.id);
-      window.history.pushState({ modal: 'chat' }, '');
-      setActiveModal(null);
-      setGroupName('');
-      setSelectedUsers([]);
-    } catch (error) {
-      console.error("Error creating group:", error);
-    }
-  };
+      const finalEst = isSuperAdmin ? targetEstId : (currentUser.etablissement || currentEstablishment?.id || 'EDU-001');
 
-  const handleSendBroadcast = async () => {
-    if (!currentUser || !groupMessageText.trim() || selectedUsers.length === 0) return;
-    
-    try {
-      for (const userId of selectedUsers) {
-        let convId;
-        let existingConv = conversations.find(c => 
-          !c.isGroup && c.participants.includes(userId)
-        );
-        
-        if (!existingConv) {
-          const q = query(
-            collection(db, 'conversations'),
-            where('participants', 'array-contains', currentUser.id)
-          );
-          const snapshot = await getDocs(q);
-          existingConv = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Conversation)).find(c => 
-            !c.isGroup && c.participants.includes(userId)
-          );
-        }
-        
-        if (existingConv) {
-          convId = existingConv.id;
-        } else {
-          const newConvRef = await addDoc(collection(db, 'conversations'), {
-            participants: [currentUser.id, userId],
-            isGroup: false,
-            lastMessage: '',
-            lastMessageTime: serverTimestamp(),
-            createdAt: serverTimestamp(),
-            unreadCounts: {
-              [currentUser.id]: 0,
-              [userId]: 0
-            }
-          });
-          convId = newConvRef.id;
-        }
-        
-        // Prefix broadcast with sender name if we want to follow the "real network" pattern
-        const senderDisplayName = currentUser.prenom || currentUser.nom ? `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim() : currentUser.email?.split('@')[0] || t('user');
-        
-        await addDoc(collection(db, `conversations/${convId}/messages`), {
-          senderId: currentUser.id,
-          text: groupMessageText.trim(),
-          createdAt: serverTimestamp()
-        });
-        
-        await setDoc(doc(db, 'conversations', convId), {
-          lastMessage: groupMessageText.trim(),
-          lastMessageTime: serverTimestamp(),
-          unreadCounts: {
-            [userId]: increment(1)
-          }
-        }, { merge: true });
-
-        // Notify recipient
-        await createNotification({
-          user_id: userId,
-          title: `${t('new_message_from')} ${senderDisplayName}`,
-          message: groupMessageText.trim(),
-          type: 'info',
-          targetTab: 'messaging'
-        });
-      }
-      
-      setActiveModal(null);
-      setGroupMessageText('');
-      setSelectedUsers([]);
-      notifySuccess(t('broadcast_send_success'));
-    } catch (error) {
-      console.error("Error sending broadcast:", error);
-      notifyError(t('broadcast_send_error') || "Error sending broadcast");
-    }
-  };
-
-  const handleSendAnnouncement = async () => {
-    if (!currentUser || !announcementText.trim()) return;
-    
-    setIsSubmittingAnnouncement(true);
-    try {
-      const senderName = currentUser.prenom || currentUser.nom ? `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim() : currentUser.email?.split('@')[0] || t('user');
-      
-      // Add announcement to a global collection
       await addDoc(collection(db, 'announcements'), {
+        text: newText.trim(),
+        type: newType,
         authorId: currentUser.id,
         authorName: senderName,
-        text: announcementText.trim(),
-        createdAt: serverTimestamp()
+        authorRole: currentUser.role || 'admin',
+        createdAt: serverTimestamp(),
+        date: new Date().toISOString(),
+        etablissement: finalEst,
+        active: true
       });
 
-      // Notify all users
-      await notifyAllUsers(
-        t('announcement'),
-        announcementText.trim(),
-        'info',
-        'dashboard' // Or wherever announcements are shown
-      );
-
-      setActiveModal(null);
-      setAnnouncementText('');
-      notifySuccess(t('announcement_publish_success'));
-    } catch (error) {
-      console.error("Error sending announcement:", error);
-      notifyError(t('announcement_publish_error') || "Error sending announcement");
+      notifySuccess("Flash Info diffusé avec succès aux utilisateurs cibles.");
+      setNewText('');
+      setShowAddModal(false);
+    } catch (err) {
+      console.error("Error broadcasting flash info:", err);
+      notifyError("Impossible de publier le message Flash Info.");
     } finally {
-      setIsSubmittingAnnouncement(false);
+      setIsSubmitting(false);
     }
   };
 
-  const toggleUserSelection = (userId: string) => {
-    setSelectedUsers(prev => 
-      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
-    );
-  };
+  // Handle Delete Announcement
+  const handleDeleteAnnouncement = async (item: FlashItem) => {
+    if (!item.id.startsWith('ann-')) return;
+    const realDocId = item.id.replace('ann-', '');
 
-  const handleLeaveGroup = async (conv: Conversation) => {
-    if (!currentUser || !conv.isGroup) return;
-    if (!window.confirm("Quitter ce groupe ?")) return;
+    if (!window.confirm("Voulez-vous supprimer ce message du bandeau Flash Info ?")) return;
 
     try {
-      const convRef = doc(db, 'conversations', conv.id);
-      const newParticipants = conv.participants.filter(id => id !== currentUser.id);
-      const userName = `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim() || currentUser.email?.split('@')[0] || "Un utilisateur";
-      const leaveText = `${userName} a quitté le groupe`;
-      
-      if (newParticipants.length === 0) {
-        await deleteDoc(convRef);
-      } else {
-        // Send a system action message to the conversation's message subcollection
-        await addDoc(collection(db, `conversations/${conv.id}/messages`), {
-          senderId: 'system',
-          isSystem: true,
-          text: leaveText,
-          createdAt: serverTimestamp(),
-          isDelivered: true
-        });
-
-        await updateDoc(convRef, {
-          participants: newParticipants,
-          lastMessage: leaveText,
-          lastMessageTime: serverTimestamp()
-        });
-      }
-      notifySuccess("Vous avez quitté le groupe.");
-      setOpenMenuId(null);
-    } catch (error) {
-      console.error("Error leaving group:", error);
-      notifyError("Erreur lors de la sortie du groupe.");
+      await deleteDoc(doc(db, 'announcements', realDocId));
+      notifySuccess("Message retiré du Flash Info.");
+    } catch (err) {
+      console.error("Error deleting announcement:", err);
+      notifyError("Erreur lors de la suppression de l'annonce.");
     }
   };
 
-  const handleDeleteGroup = async (convId: string, conv?: Conversation) => {
-    const isAllowed = currentUser && (
-      currentUser.role === 'admin' ||
-      currentUser.role === 'personnel administratif' ||
-      currentUser.role === 'enseignant' ||
-      conv?.createdBy === currentUser.id ||
-      !conv?.createdBy
-    );
-    if (!currentUser || !isAllowed) return;
-    if (!window.confirm("Supprimer ce groupe définitivement pour tous ?")) return;
+  const canManage = isSuperAdmin || currentUser?.role === 'admin' || currentUser?.role === 'directeur';
 
-    try {
-      await deleteDoc(doc(db, 'conversations', convId));
-      notifySuccess("Le groupe a été supprimé.");
-      setOpenMenuId(null);
-    } catch (error) {
-      console.error("Error deleting group:", error);
-      notifyError("Erreur lors de la suppression du groupe.");
-    }
-  };
-
-  if (selectedConversationId) {
-    return <Chat conversationId={selectedConversationId} onBack={handleBackFromChat} />;
-  }
+  if (flashItems.length === 0 && !canManage) return null;
+  if (!visible) return null;
 
   return (
-    <div className="max-w-5xl mx-auto h-[calc(100dvh-6rem)] sm:h-[calc(100vh-7rem)] flex flex-col p-2 sm:p-0">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3 shrink-0">
-        <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white shrink-0">{t('messaging')}</h1>
-          {currentUser?.role === 'admin' && (
-            <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg overflow-x-auto no-scrollbar">
-              <button
-                onClick={() => setActiveTab('conversations')}
-                className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'conversations' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-              >
-                {t('my_conversations')}
-              </button>
-              <button
-                onClick={() => setActiveTab('monitoring')}
-                className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'monitoring' ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-              >
-                {t('student_monitoring')}
-              </button>
+    <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white py-2.5 px-4 rounded-2xl shadow-md border border-indigo-500/30 mb-6 transition-all">
+      <div className="flex items-center justify-between gap-3">
+        {/* Flash Info Badge / Title */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center shadow-xs animate-pulse">
+            <Radio size={16} className="text-white" />
+          </div>
+          <div className="hidden sm:flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <span className="font-black text-[11px] uppercase tracking-wider bg-white/10 px-2 py-0.5 rounded text-amber-300">
+                Flash Info
+              </span>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setSuperAdminViewMode(superAdminViewMode === 'selected' ? 'all' : 'selected')}
+                  className="px-2 py-0.5 rounded bg-indigo-600/60 hover:bg-indigo-600 text-[10px] font-bold text-white transition-all flex items-center gap-1 cursor-pointer"
+                  title="Basculer entre la vue globale et l'établissement actif"
+                >
+                  <Layers size={10} />
+                  {superAdminViewMode === 'all' ? 'Tous les Campus' : (currentEstablishment?.nom || 'Campus')}
+                </button>
+              )}
             </div>
-          )}
-        </div>
-        
-        <div className="flex gap-1.5 sm:gap-2 w-full sm:w-auto overflow-x-auto no-scrollbar py-1">
-          <button 
-            onClick={() => setActiveModal('newGroup')}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-xs font-medium whitespace-nowrap shrink-0"
-          >
-            <Users size={14} className="sm:w-4 sm:h-4 text-indigo-600" />
-            <span>{t('new_group')}</span>
-          </button>
-          <button 
-            onClick={() => setActiveModal('groupMessage')}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-xs font-medium whitespace-nowrap shrink-0"
-          >
-            <Send size={14} className="sm:w-4 sm:h-4 text-indigo-600" />
-            <span>{t('group_message')}</span>
-          </button>
-          <button 
-            onClick={() => setActiveModal('announcement')}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 transition-colors text-xs font-medium whitespace-nowrap shrink-0"
-          >
-            <Megaphone size={14} className="sm:w-4 sm:h-4" />
-            <span>{t('announcement')}</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder={t('search_user_group_placeholder')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-            />
+            {!isSuperAdmin && currentEstablishment && (
+              <span className="text-[9.5px] text-indigo-300/80 font-bold flex items-center gap-1 truncate max-w-[140px]">
+                <Building2 size={10} className="shrink-0" />
+                {currentEstablishment.nom}
+              </span>
+            )}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-gray-200 dark:divide-gray-700">
-          {activeTab === 'conversations' ? (
-            <>
-              {groupConversations.length > 0 && (
-                <div className="bg-gray-50 dark:bg-gray-800/50">
-                  <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    {t('groups')}
-                  </div>
-                  {groupConversations.map((conv) => (
-                    <div 
-                      key={conv.id} 
-                      className="p-4 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors cursor-pointer flex items-center justify-between group relative"
-                      onClick={() => {
-                        setSelectedConversationId(conv.id);
-                        window.history.pushState({ modal: 'chat' }, '');
-                      }}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-lg shrink-0 overflow-hidden">
-                            <Users size={24} />
-                          </div>
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900 dark:text-white">
-                            {conv.groupName}
-                          </h3>
-                          <p className={`text-sm dark:text-gray-400 line-clamp-1 ${conv.unreadCounts?.[currentUser.id] ? 'text-gray-900 dark:text-gray-200 font-semibold' : 'text-gray-500'}`}>
-                            {conv.isGroup && conv.lastMessage && conv.lastMessage.includes(': ') ? (
-                              <>
-                                <span className="font-bold text-gray-700 dark:text-gray-300">{conv.lastMessage.split(': ')[0]}: </span>
-                                {conv.lastMessage.split(': ').slice(1).join(': ')}
-                              </>
-                            ) : (
-                              conv.lastMessage || <span className="italic">{t('new_conversation')}</span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-xs text-gray-400">
-                            {conv.lastMessageTime ? format(conv.lastMessageTime.toDate(), 'HH:mm', { locale: fr }) : ''}
-                          </span>
-                          {conv.unreadCounts?.[currentUser.id] ? (
-                            <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                              {conv.unreadCounts[currentUser.id]}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="relative">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenMenuId(openMenuId === conv.id ? null : conv.id);
-                            }}
-                            className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full text-gray-500 transition-colors"
-                          >
-                            <MoreVertical size={18} />
-                          </button>
-                          {openMenuId === conv.id && (
-                            <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 py-1">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setViewingMembersGroup(conv);
-                                  setOpenMenuId(null);
-                                }}
-                                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
-                              >
-                                <Eye size={16} />
-                                Voir les membres
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleLeaveGroup(conv);
-                                }}
-                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
-                              >
-                                <LogOut size={16} />
-                                Quitter le groupe
-                              </button>
-                               {(currentUser?.role === 'admin' ||
-                                 currentUser?.role === 'personnel administratif' ||
-                                 currentUser?.role === 'enseignant' ||
-                                 conv.createdBy === currentUser?.id ||
-                                 !conv.createdBy) && (
-                                 <button
-                                   onClick={(e) => {
-                                     e.stopPropagation();
-                                     handleDeleteGroup(conv.id, conv);
-                                   }}
-                                   className="w-full text-left px-4 py-2 text-sm text-red-600 font-bold hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
-                                 >
-                                   <Trash2 size={16} />
-                                   Supprimer le groupe
-                                 </button>
-                               )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+        {/* Marquee Ticker Area */}
+        <div className="flex-1 overflow-hidden py-0.5">
+          {flashItems.length === 0 ? (
+            <div className="text-xs text-indigo-200/70 italic font-medium flex items-center gap-2">
+              <ShieldCheck size={14} className="text-emerald-400" />
+              <span>Aucun message actif pour <strong>{currentEstablishment?.nom || 'votre établissement'}</strong>. Les alertes et inscriptions s'afficheront ici en direct.</span>
+            </div>
+          ) : (
+            <div className="animate-marquee whitespace-nowrap flex items-center gap-10">
+              {flashItems.map((item, idx) => (
+                <div key={item.id || idx} className="inline-flex items-center gap-2 text-xs">
+                  {item.type === 'urgent' && (
+                    <span className="px-2 py-0.5 bg-rose-500 text-white rounded text-[10px] font-black uppercase tracking-wider animate-bounce flex items-center gap-1">
+                      <AlertTriangle size={11} /> Urgent
+                    </span>
+                  )}
+                  {item.type === 'flash' && (
+                    <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                      <Sparkles size={11} /> Flash
+                    </span>
+                  )}
+                  {item.type === 'registration' && (
+                    <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                      <UserPlus size={11} /> Inscription
+                    </span>
+                  )}
+                  {item.type === 'info' && (
+                    <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                      <Megaphone size={11} /> Avis
+                    </span>
+                  )}
 
-              <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-800/50">
-                {t('users')}
-              </div>
-              {filteredUsers.length > 0 ? (
-                filteredUsers.map((user) => {
-                  // Find if there is an existing conversation to show last message
-                  const existingConv = conversations.find(c => !c.isGroup && c.participants.includes(user.id) && c.participants.includes(currentUser.id));
-                  
-                  return (
-                    <div 
-                      key={user.id} 
-                      className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer flex items-center justify-between group"
-                      onClick={() => handleStartDirectChat(user.id)}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-lg shrink-0 overflow-hidden">
-                            {user.photo ? (
-                              <img src={user.photo} alt={user.nom} className="w-full h-full object-cover" />
-                            ) : (
-                              user.prenom || user.nom ? `${user.prenom?.[0] || ''}${user.nom?.[0] || ''}` : user.email?.[0] || 'U'
-                            )}
-                          </div>
-                          {user.status === 'online' && (
-                            <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></div>
-                          )}
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900 dark:text-white">
-                            {user.prenom || user.nom ? `${user.prenom || ''} ${user.nom || ''}`.trim() : user.email?.split('@')[0] || t('user')}
-                          </h3>
-                          <p className={`text-sm line-clamp-1 ${existingConv?.unreadCounts?.[currentUser?.id] ? 'text-gray-900 dark:text-gray-200 font-semibold italic' : 'text-gray-500 dark:text-gray-400'}`}>
-                            {existingConv?.lastMessage || <span className="italic">{t('new_conversation')}</span>}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        {existingConv?.lastMessageTime && (
-                          <span className="text-xs text-gray-400">
-                            {format(existingConv.lastMessageTime.toDate(), 'HH:mm', { locale: fr })}
-                          </span>
-                        )}
-                        {existingConv?.unreadCounts?.[currentUser.id] ? (
-                          <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                            {existingConv.unreadCounts[currentUser.id]}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="p-8 text-center text-gray-500 dark:text-gray-400 flex flex-col items-center justify-center h-full">
-                  <MessageCircle size={48} className="text-gray-300 dark:text-gray-600 mb-4" />
-                  <p>{t('no_user_found')}</p>
+                  {/* Super Admin establishment tag */}
+                  {isSuperAdmin && superAdminViewMode === 'all' && (
+                    <span className="px-1.5 py-0.5 bg-white/10 text-indigo-200 rounded text-[10px] font-bold">
+                      [{item.etablissementNom}]
+                    </span>
+                  )}
+
+                  <span className="font-medium text-gray-100">
+                    {item.text}
+                  </span>
+
+                  {item.authorName && item.source === 'announcement' && (
+                    <span className="text-[10.5px] text-indigo-300/80 font-bold">
+                      — {item.authorName}
+                    </span>
+                  )}
                 </div>
+              ))}
+
+              {/* Duplicate for smooth infinite loop if small list */}
+              {flashItems.length > 0 && flashItems.length < 4 && flashItems.map((item, idx) => (
+                <div key={`dup-${item.id || idx}`} className="inline-flex items-center gap-2 text-xs opacity-95">
+                  {item.type === 'urgent' && (
+                    <span className="px-2 py-0.5 bg-rose-500 text-white rounded text-[10px] font-black uppercase">
+                      Urgent
+                    </span>
+                  )}
+                  {item.type === 'flash' && (
+                    <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px] font-black">
+                      Flash
+                    </span>
+                  )}
+                  {item.type === 'registration' && (
+                    <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px] font-black">
+                      Inscription
+                    </span>
+                  )}
+                  <span className="font-medium text-gray-100">
+                    {item.text}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons: Add Flash (Admin/SuperAdmin) & Close */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {canManage && (
+            <>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                title="Publier un message Flash Info"
+              >
+                <Plus size={14} />
+                <span className="hidden md:inline">Diffuser</span>
+              </button>
+              {flashItems.some(f => f.source === 'announcement') && (
+                <button
+                  onClick={() => setShowManageModal(true)}
+                  className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all cursor-pointer"
+                  title="Gérer les annonces actives"
+                >
+                  <Megaphone size={14} />
+                </button>
               )}
             </>
-          ) : (
-            <div className="bg-gray-50 dark:bg-gray-800/50">
-              <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                {t('student_conversations')}
-              </div>
-              {studentConversations.length > 0 ? (
-                studentConversations.map((conv) => {
-                  const participants = conv.participants.map(pId => {
-                    const user = allUsers.find(u => u.id === pId) || (pId === currentUser?.id ? currentUser : null);
-                    return user ? `${user.prenom} ${user.nom}` : t('unknown');
-                  }).join(' & ');
-
-                  return (
-                    <div 
-                      key={conv.id} 
-                      className="p-4 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors cursor-pointer flex items-center justify-between group"
-                      onClick={() => {
-                        setSelectedConversationId(conv.id);
-                        window.history.pushState({ modal: 'chat' }, '');
-                      }}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold text-lg shrink-0 overflow-hidden">
-                            <MessageCircle size={24} />
-                          </div>
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900 dark:text-white">
-                            {participants}
-                          </h3>
-                          <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-1">
-                            {conv.lastMessage || <span className="italic">{t('no_message')}</span>}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="text-xs text-gray-400">
-                          {conv.lastMessageTime ? format(conv.lastMessageTime.toDate(), 'HH:mm', { locale: fr }) : ''}
-                        </span>
-                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded uppercase font-bold">
-                          {t('monitoring')}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="p-8 text-center text-gray-500 dark:text-gray-400 flex flex-col items-center justify-center h-full">
-                  <MessageCircle size={48} className="text-gray-300 dark:text-gray-600 mb-4" />
-                  <p>{t('no_student_conversations')}</p>
-                </div>
-              )}
-            </div>
           )}
+
+          <button
+            onClick={() => setVisible(false)}
+            className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-xl transition-colors cursor-pointer"
+            title="Masquer le bandeau"
+          >
+            <X size={16} />
+          </button>
         </div>
       </div>
 
-      {/* Modals */}
-      {activeModal === 'newGroup' && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shrink-0">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Users size={20} className="text-indigo-600" />
-                {t('new_group')}
-              </h2>
-              <button onClick={() => { setActiveModal(null); setSelectedUsers([]); setGroupName(''); }} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-                &times;
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto flex-1 custom-scrollbar">
-              <input
-                type="text"
-                placeholder={t('group_name')}
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 mb-4"
-              />
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('select_participants')}</p>
-              <div className="space-y-2">
-                {allUsers.map(user => (
-                  <label 
-                    key={user.id}
-                    className="flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg cursor-pointer transition-colors"
-                  >
-                    <input 
-                      type="checkbox" 
-                      checked={selectedUsers.includes(user.id)}
-                      onChange={() => toggleUserSelection(user.id)}
-                      className="rounded text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold overflow-hidden shrink-0 uppercase">
-                      {user.photo ? (
-                        <img src={user.photo} alt={user.nom} className="w-full h-full object-cover" />
-                      ) : (
-                        user.prenom || user.nom ? `${user.prenom?.[0] || ''}${user.nom?.[0] || ''}` : user.email?.[0] || 'U'
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {user.prenom || user.nom ? `${user.prenom || ''} ${user.nom || ''}`.trim() : user.email?.split('@')[0] || t('user')}
-                      </p>
-                      <p className="text-xs text-gray-500 capitalize">{tData(user.role)}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 shrink-0">
-              <button 
-                onClick={() => { setActiveModal(null); setSelectedUsers([]); setGroupName(''); }}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors"
-              >
-                {t('cancel')}
-              </button>
-              <button 
-                onClick={handleCreateGroup}
-                disabled={!groupName.trim() || selectedUsers.length === 0}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
-                {t('create_group')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeModal === 'groupMessage' && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shrink-0">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Send size={20} className="text-indigo-600" />
-                {t('group_message_diffusion')}
-              </h2>
-              <button onClick={() => { setActiveModal(null); setSelectedUsers([]); setGroupMessageText(''); }} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-                &times;
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto flex-1 custom-scrollbar">
-              <textarea
-                placeholder={t('write_message_placeholder')}
-                value={groupMessageText}
-                onChange={(e) => setGroupMessageText(e.target.value)}
-                className="w-full h-32 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 resize-none mb-4"
-              />
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('select_recipients')}</p>
-              <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar border border-gray-200 dark:border-gray-700 rounded-lg p-2">
-                {allUsers.map(user => (
-                  <label 
-                    key={user.id}
-                    className="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg cursor-pointer transition-colors"
-                  >
-                    <input 
-                      type="checkbox" 
-                      checked={selectedUsers.includes(user.id)}
-                      onChange={() => toggleUserSelection(user.id)}
-                      className="rounded text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold overflow-hidden shrink-0 text-xs uppercase">
-                      {user.photo ? (
-                        <img src={user.photo} alt={user.nom} className="w-full h-full object-cover" />
-                      ) : (
-                        user.prenom || user.nom ? `${user.prenom?.[0] || ''}${user.nom?.[0] || ''}` : user.email?.[0] || 'U'
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm text-gray-900 dark:text-white">
-                        {user.prenom || user.nom ? `${user.prenom || ''} ${user.nom || ''}`.trim() : user.email?.split('@')[0] || t('user')}
-                      </p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 shrink-0">
-              <button 
-                onClick={() => { setActiveModal(null); setSelectedUsers([]); setGroupMessageText(''); }}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors"
-              >
-                {t('cancel')}
-              </button>
-              <button 
-                onClick={handleSendBroadcast}
-                disabled={!groupMessageText.trim() || selectedUsers.length === 0}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-2"
-              >
-                <Send size={18} />
-                {t('send_to_n_people').replace('{{count}}', selectedUsers.length.toString())}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeModal === 'announcement' && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shrink-0">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Megaphone size={20} className="text-indigo-600" />
-                {t('make_announcement')}
-              </h2>
-              <button onClick={() => setActiveModal(null)} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-                &times;
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto flex-1">
-              <textarea
-                placeholder={t('announcement_text_placeholder')}
-                value={announcementText}
-                onChange={(e) => setAnnouncementText(e.target.value)}
-                className="w-full h-32 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 resize-none mb-4"
-              />
-              <div className="flex items-center gap-2 mb-4">
-                <button type="button" className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors" title={t('image')}>
-                  <Image size={20} />
-                </button>
-                <button type="button" className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors" title={t('video')}>
-                  <Video size={20} />
-                </button>
-                <button type="button" className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors" title={t('file')}>
-                  <Paperclip size={20} />
-                </button>
-                <button type="button" className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors" title="Emojis">
-                  <Smile size={20} />
-                </button>
-                <div className="flex-1"></div>
-                <button type="button" className="flex items-center gap-2 p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-sm font-medium" title={t('schedule')}>
-                  <Clock size={18} />
-                  <span>{t('schedule')}</span>
-                </button>
-              </div>
-              <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-3 rounded-lg text-sm">
-                {t('announcement_visibility_notice')}
-              </div>
-            </div>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 shrink-0">
-              <button 
-                onClick={() => setActiveModal(null)}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors"
-              >
-                {t('cancel')}
-              </button>
-              <button 
-                onClick={handleSendAnnouncement}
-                disabled={!announcementText.trim() || isSubmittingAnnouncement}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                <Send size={18} />
-                {isSubmittingAnnouncement ? t('sending') : t('publish_announcement')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {viewingMembersGroup && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-              <h3 className="font-bold text-gray-900 dark:text-white">Membres du groupe</h3>
-              <button onClick={() => setViewingMembersGroup(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
-                <X size={20} className="text-gray-400" />
-              </button>
-            </div>
-            <div className="max-h-[60vh] overflow-y-auto p-2 space-y-1">
-              {viewingMembersGroup.participants.map((pId) => {
-                const user = pId === currentUser?.id ? currentUser : usersInfo[pId];
-                if (!user) return (
-                  <div key={pId} className="p-3 text-xs text-gray-500 italic">
-                    ID: {pId} (Chargement...)
+      {/* MODAL : NOUVEAU FLASH INFO */}
+      <AnimatePresence>
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowAddModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative bg-white dark:bg-gray-850 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col text-gray-900 dark:text-white"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-6 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-amber-500 text-slate-950 rounded-xl">
+                    <Radio size={20} />
                   </div>
-                );
-                return (
-                  <div key={pId} className="flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl transition-colors">
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold overflow-hidden shadow-sm uppercase">
-                      {user.photo ? (
-                        <img src={user.photo} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        `${user.prenom?.[0] || ''}${user.nom?.[0] || user.email?.[0] || 'U'}`
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-bold dark:text-white">{user.prenom} {user.nom}</p>
-                      <p className="text-[10px] text-gray-500 uppercase font-black">{tData(user.role)}</p>
-                    </div>
-                    {pId === currentUser?.id && (
-                      <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg uppercase">Moi</span>
+                  <div>
+                    <h3 className="text-base font-black tracking-tight text-white">Diffuser un Flash Info</h3>
+                    <p className="text-[11px] text-indigo-300">
+                      Visible uniquement par l'établissement ciblé et le Super Admin.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl cursor-pointer transition-all"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateAnnouncement} className="p-6 space-y-4">
+                {/* Text Message */}
+                <div>
+                  <label className="block text-xs font-black uppercase text-gray-400 mb-1.5">
+                    Texte du Message Flash <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={newText}
+                    onChange={(e) => setNewText(e.target.value)}
+                    placeholder="Ex: Réunion d'information parents-professeurs vendredi à 17h au réfectoire..."
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl text-xs outline-none focus:border-indigo-500 text-gray-900 dark:text-white resize-none"
+                  />
+                </div>
+
+                {/* Type & Priority */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-black uppercase text-gray-400 mb-1.5">
+                      Catégorie d'Alerte
+                    </label>
+                    <select
+                      value={newType}
+                      onChange={(e) => setNewType(e.target.value as any)}
+                      className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-200 outline-none"
+                    >
+                      <option value="flash">⚡ Flash Info Rapide</option>
+                      <option value="urgent">⚠️ Urgent / Alerte</option>
+                      <option value="info">📢 Avis Officiel</option>
+                      <option value="event">🎉 Événement / Cérémonie</option>
+                    </select>
+                  </div>
+
+                  {/* Target Establishment */}
+                  <div>
+                    <label className="block text-xs font-black uppercase text-gray-400 mb-1.5">
+                      Établissement Cible
+                    </label>
+                    {isSuperAdmin ? (
+                      <select
+                        value={targetEstId}
+                        onChange={(e) => setTargetEstId(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-200 outline-none"
+                      >
+                        <option value="ALL">🌐 Tous les Établissements</option>
+                        {establishments.map(est => (
+                          <option key={est.id} value={est.id}>{est.nom} ({est.code})</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="px-3 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <Building2 size={14} className="text-indigo-500" />
+                        <span className="truncate">{currentEstablishment?.nom || 'Votre Établissement'}</span>
+                      </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+
+                <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-100 dark:border-indigo-900/30 text-[11px] text-indigo-700 dark:text-indigo-300 flex items-start gap-2">
+                  <ShieldCheck size={16} className="shrink-0 text-indigo-600 dark:text-indigo-400 mt-0.5" />
+                  <span>
+                    <strong>Isolation garantie :</strong> Ce message sera diffusé en temps réel uniquement aux élèves, parents, enseignants et personnels de l'établissement choisi. Les autres écoles n'y auront pas accès.
+                  </span>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold cursor-pointer transition-all"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !newText.trim()}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-indigo-500/20"
+                  >
+                    {isSubmitting ? 'Publication...' : 'Diffuser Immédiatement'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
+
+      {/* MODAL : GESTION DES FLASH INFO ACTIFS */}
+      <AnimatePresence>
+        {showManageModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowManageModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative bg-white dark:bg-gray-850 rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col text-gray-900 dark:text-white max-h-[85vh]"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-6 bg-slate-900 text-white flex items-center justify-between border-b border-gray-800">
+                <div className="flex items-center gap-2.5">
+                  <Megaphone size={20} className="text-amber-400" />
+                  <div>
+                    <h3 className="text-base font-black text-white">Annonces & Flash Info Actifs</h3>
+                    <p className="text-[11px] text-gray-400">
+                      Gérez ou retirez les annonces actuellement affichées dans le bandeau.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowManageModal(false)}
+                  className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl cursor-pointer transition-all"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-3 custom-scrollbar flex-1">
+                {flashItems.filter(f => f.source === 'announcement').length === 0 ? (
+                  <div className="text-center py-8 text-gray-400 text-xs">
+                    Aucune annonce manuelle active dans le bandeau.
+                  </div>
+                ) : (
+                  flashItems.filter(f => f.source === 'announcement').map(item => (
+                    <div
+                      key={item.id}
+                      className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-black rounded uppercase">
+                            {item.type || 'Flash'}
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-bold">
+                            {item.etablissementNom}
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white line-clamp-2">
+                          {item.text}
+                        </p>
+                        <span className="text-[10px] text-gray-500 block mt-1">
+                          Par {item.authorName || 'Direction'}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeleteAnnouncement(item)}
+                        className="p-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl transition-colors cursor-pointer shrink-0"
+                        title="Retirer du bandeau"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="p-4 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowManageModal(false)}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl cursor-pointer"
+                >
+                  Fermer
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-marquee {
+          display: inline-flex;
+          animation: marquee 24s linear infinite;
+        }
+        .animate-marquee:hover {
+          animation-play-state: paused;
+        }
+      `}} />
     </div>
   );
 }
