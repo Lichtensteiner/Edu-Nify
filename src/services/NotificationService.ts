@@ -10,6 +10,7 @@ export interface NotificationData {
   targetTab?: string;
   read: boolean;
   timestamp: string;
+  etablissement?: string;
 }
 
 export const createNotification = async (data: Omit<NotificationData, 'read' | 'timestamp'>) => {
@@ -21,34 +22,59 @@ export const createNotification = async (data: Omit<NotificationData, 'read' | '
       timestamp: new Date().toISOString()
     });
 
-    // 2. Propagate to conservator accounts (users with role 'admin')
-    const { getDocs, query, where, collection: firestoreCollection } = await import('firebase/firestore');
+    // 2. Propagate to administrator accounts of the SAME establishment
+    const { getDocs, query, where, collection: firestoreCollection, doc: getDocRef, getDoc } = await import('firebase/firestore');
+    
+    // Find target user's establishment if not provided
+    let userEst = data.etablissement;
+    if (!userEst && data.user_id) {
+      try {
+        const uSnap = await getDoc(getDocRef(db, 'users', data.user_id));
+        if (uSnap.exists()) {
+          userEst = uSnap.data().etablissement || 'EDU-001';
+        }
+      } catch (e) {
+        // fallback
+      }
+    }
+
     const q = query(firestoreCollection(db, 'users'), where('role', '==', 'admin'));
     const adminSnap = await getDocs(q);
-    const promises = adminSnap.docs.map(adminDoc => {
-      if (adminDoc.id !== data.user_id) {
+    const promises = adminSnap.docs
+      .filter(adminDoc => {
+        if (adminDoc.id === data.user_id) return false;
+        if (userEst) {
+          const adminEst = adminDoc.data().etablissement || 'EDU-001';
+          return adminEst === userEst;
+        }
+        return true;
+      })
+      .map(adminDoc => {
         return addDoc(firestoreCollection(db, 'notifications'), {
           ...data,
           user_id: adminDoc.id,
-          title: `[Conservateur] ${data.title}`,
+          title: `[Administration] ${data.title}`,
           read: false,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          etablissement: userEst || 'EDU-001'
         });
-      }
-      return Promise.resolve();
-    });
+      });
     await Promise.all(promises);
   } catch (error) {
     console.error("Error creating notification in service:", error);
   }
 };
 
-export const notifyAllUsers = async (title: string, message: string, type: 'info' | 'warning' | 'success', targetTab?: string) => {
+export const notifyAllUsers = async (title: string, message: string, type: 'info' | 'warning' | 'success', targetTab?: string, establishmentId?: string) => {
   try {
     const { getDocs, collection } = await import('firebase/firestore');
     const usersSnap = await getDocs(collection(db, 'users'));
     
-    const promises = usersSnap.docs.map(userDoc => 
+    const targetDocs = establishmentId
+      ? usersSnap.docs.filter(doc => (doc.data().etablissement || 'EDU-001') === establishmentId)
+      : usersSnap.docs;
+
+    const promises = targetDocs.map(userDoc => 
       createNotification({
         user_id: userDoc.id,
         title,
