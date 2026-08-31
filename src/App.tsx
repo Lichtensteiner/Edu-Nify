@@ -12,6 +12,7 @@ import Footer from "./components/Footer";
 import MandatoryPasswordChange from "./components/MandatoryPasswordChange";
 import PWAPrompt from "./components/PWAPrompt";
 import ReloadPrompt from "./components/ReloadPrompt";
+import InternetConnectionGuard from "./components/InternetConnectionGuard";
 
 // Pages
 import AIAssistant from "./pages/AIAssistant";
@@ -358,6 +359,7 @@ export default function App() {
         <AuthProvider>
           <NotificationProvider>
             <EstablishmentProvider>
+              <InternetConnectionGuard />
               <AppContent />
             </EstablishmentProvider>
           </NotificationProvider>
