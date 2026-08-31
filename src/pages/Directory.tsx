@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { User, MessageCircle, GraduationCap, UserPlus, Search, ChevronRight, Mail, Trash2, X, MapPin, Phone, Briefcase, Ban } from 'lucide-react';
@@ -22,6 +23,7 @@ interface UserProfile {
   age?: number;
   matricule?: string;
   biographie?: string;
+  etablissement?: string;
 }
 
 interface DirectoryProps {
@@ -30,6 +32,7 @@ interface DirectoryProps {
 
 export default function Directory({ onNavigate }: DirectoryProps) {
   const { currentUser } = useAuth();
+  const { currentEstablishment, isSuperAdmin } = useEstablishment();
   const { t } = useLanguage();
   const { notifySuccess, notifyError, notifyDelete } = useNotification();
   const [activeTab, setActiveTab] = useState<'staff' | 'students'>('staff');
@@ -44,32 +47,40 @@ export default function Directory({ onNavigate }: DirectoryProps) {
   const [inviteRole, setInviteRole] = useState('enseignant');
   const [viewUser, setViewUser] = useState<UserProfile | null>(null);
 
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
+
   useEffect(() => {
     fetchUsers();
 
-    // Set up real-time listener for all users to get status updates
+    // Set up real-time listener for users of the active establishment
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const allUsers = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as UserProfile[];
+      const allUsers = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as UserProfile[];
 
-      const staffUsers = allUsers
+      const filteredByEst = allUsers.filter(u => (u.etablissement || 'EDU-001') === activeEstId);
+
+      const staffUsers = filteredByEst
         .filter(u => ['admin', 'enseignant', 'personnel administratif'].includes(u.role))
         .sort((a, b) => `${a.nom || ''} ${a.prenom || ''}`.trim().localeCompare(`${b.nom || ''} ${b.prenom || ''}`.trim()));
-      let studentUsers = allUsers
-        .filter(u => u.role === 'élève')
+      let studentUsers = filteredByEst
+        .filter(u => u.role === 'élève' || u.role === 'eleve')
         .sort((a, b) => `${a.nom || ''} ${a.prenom || ''}`.trim().localeCompare(`${b.nom || ''} ${b.prenom || ''}`.trim()));
-      
-      // If parent, maybe only show students in the same class as their children?
-      // For now, let's just keep it simple or filter if needed.
       
       setStaff(staffUsers);
       setStudents(studentUsers);
+
+      const uniqueClasses = Array.from(new Set(studentUsers.map(s => s.classe).filter(Boolean))) as string[];
+      setClasses(uniqueClasses.sort());
+      if (uniqueClasses.length > 0) {
+        setSelectedClass(prev => (uniqueClasses.includes(prev) ? prev : uniqueClasses[0]));
+      }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [activeEstId]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -83,11 +94,13 @@ export default function Directory({ onNavigate }: DirectoryProps) {
         ...doc.data()
       })) as UserProfile[];
 
-      const staffUsers = allUsers
+      const filteredByEst = allUsers.filter(u => (u.etablissement || 'EDU-001') === activeEstId);
+
+      const staffUsers = filteredByEst
         .filter(u => ['admin', 'enseignant', 'personnel administratif'].includes(u.role))
         .sort((a, b) => `${a.nom || ''} ${a.prenom || ''}`.trim().localeCompare(`${b.nom || ''} ${b.prenom || ''}`.trim()));
-      const studentUsers = allUsers
-        .filter(u => u.role === 'élève')
+      const studentUsers = filteredByEst
+        .filter(u => u.role === 'élève' || u.role === 'eleve')
         .sort((a, b) => `${a.nom || ''} ${a.prenom || ''}`.trim().localeCompare(`${b.nom || ''} ${b.prenom || ''}`.trim()));
       
       setStaff(staffUsers);
@@ -139,7 +152,8 @@ export default function Directory({ onNavigate }: DirectoryProps) {
         role: inviteRole,
         invitedBy: currentUser?.id,
         createdAt: new Date().toISOString(),
-        status: 'pending'
+        status: 'pending',
+        etablissement: activeEstId
       });
       notifySuccess(`Invitation envoyée à ${inviteEmail} en tant que ${inviteRole}`);
       setShowInviteModal(false);
