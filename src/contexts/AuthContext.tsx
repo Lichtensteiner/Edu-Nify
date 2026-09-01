@@ -21,6 +21,8 @@ export interface User {
   mustChangePassword?: boolean;
   temporaryPassword?: string;
   etablissement?: string;
+  statut_enseignant?: 'permanent' | 'prestataire' | 'stagiaire';
+  statutEnseignant?: 'permanent' | 'prestataire' | 'stagiaire';
   responsibilities?: string[];
   children_ids?: string[];
   classe?: string;
@@ -327,6 +329,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               prenom: userData.prenom,
               email: userData.email,
               role: userData.role,
+              etablissement: userData.etablissement || 'EDU-001',
               timestamp: new Date().toISOString(),
               fallback: true
             });
@@ -394,6 +397,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             prenom: prenom,
             email: userData.email || loginEmail,
             role: userData.role || (normEmail === 'martinienmvezogo@gmail.com' ? 'admin' : userData.role),
+            etablissement: userData.etablissement || 'EDU-001',
             timestamp: new Date().toISOString()
           });
         } else if (loginEmail.toLowerCase().trim() === 'martinienmvezogo@gmail.com') {
@@ -403,6 +407,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             prenom: 'Martinien',
             email: loginEmail,
             role: 'admin',
+            etablissement: 'EDU-001',
             timestamp: new Date().toISOString()
           });
 
@@ -514,16 +519,18 @@ export function mapPositionToResponsibility(pos?: string): string[] {
   const normalized = pos.toLowerCase().trim()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // strip accents
   
-  if (normalized.includes('college')) return ['responsable_college'];
-  if (normalized.includes('primaire')) return ['responsable_primaire'];
-  if (normalized.includes('maternelle')) return ['responsable_maternelle'];
+  if (normalized.includes('proviseur') || normalized.includes('lycee') || normalized.includes('secondaire') || normalized.includes('censeur')) return ['responsable_lycee'];
+  if (normalized.includes('college') || normalized.includes('principal')) return ['responsable_college'];
+  if (normalized.includes('primaire') || normalized.includes('directeur primaire') || normalized.includes('directrice primaire')) return ['responsable_primaire'];
+  if (normalized.includes('maternelle') || normalized.includes('directrice maternelle') || normalized.includes('creche')) return ['responsable_maternelle'];
   if (normalized.includes('secretaire generale') || normalized === 'secretaire generale') return ['secretaire_generale'];
   if (normalized.includes('secretaire adjoint') || normalized === 'secretaire adjointe') return ['secretaire_adjointe'];
   if (normalized === 'surveillant' || normalized.includes('surveillant general') || normalized === 'surveillant general') return ['surveillant_general'];
   if (normalized.includes('surveillant adjoint')) return ['surveillant_adjoint'];
-  if (normalized.includes('comptable')) return ['gestionnaire_comptable'];
-  if (normalized.includes('pedagogique') || normalized.includes('charge pedagogique')) return ['responsable_pedagogique'];
-  if (normalized.includes('menage')) return ['dame_menage'];
+  if (normalized.includes('comptable') || normalized.includes('intendant') || normalized.includes('tresorier')) return ['gestionnaire_comptable'];
+  if (normalized.includes('pedagogique') || normalized.includes('charge pedagogique') || normalized.includes('directeur des etudes')) return ['responsable_pedagogique'];
+  if (normalized.includes('menage') || normalized.includes('salubrite') || normalized.includes('entretien')) return ['dame_menage'];
+  if (normalized.includes('informatique') || normalized.includes('it') || normalized.includes('materiel') || normalized.includes('technicien')) return ['responsable_it'];
   return [];
 }
 
