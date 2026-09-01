@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, isFirebaseConfigured } from '../lib/firebase';
-import { collection, query, onSnapshot, doc, setDoc, updateDoc, writeBatch, deleteDoc, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, writeBatch, deleteDoc, getDocs } from 'firebase/firestore';
 import { 
   ShieldCheck, 
   Sparkles, 
@@ -25,14 +25,16 @@ import {
   Award, 
   Info,
   ChevronRight,
-  UserCheck
+  UserCheck,
+  Building2
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotification } from '../contexts/NotificationContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, mapPositionToResponsibility } from '../contexts/AuthContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 
 interface ResponsibilityItem {
-  id: string; // "role_pageId"
+  id: string; // "activeEstId_role_pageId"
   pageId: string;
   pageLabel: string;
   role: string;
@@ -41,6 +43,7 @@ interface ResponsibilityItem {
   canDelete: boolean;
   mission: string;
   lastUpdated: string;
+  etablissement?: string;
 }
 
 const systemRoles = [
@@ -52,7 +55,8 @@ const systemRoles = [
   { id: 'cuisinier', label: 'Personnel Cantine', color: 'rose' },
   { id: 'responsable_maternelle', label: 'Responsable de la Maternelle', color: 'pink' },
   { id: 'responsable_primaire', label: 'Responsable du Primaire', color: 'sky' },
-  { id: 'responsable_college', label: 'Responsable Collège', color: 'indigo' },
+  { id: 'responsable_college', label: 'Responsable Collège (6ème à 3ème)', color: 'indigo' },
+  { id: 'responsable_lycee', label: 'Responsable Lycée / Proviseur (6ème en Terminale / 2nde en Terminale)', color: 'violet' },
   { id: 'gestionnaire_comptable', label: 'Gestionnaire Comptable', color: 'emerald' },
   { id: 'responsable_pedagogique', label: 'Responsable Pédagogique', color: 'amber' },
   { id: 'surveillant_general', label: 'Surveillant Général', color: 'red' },
@@ -138,6 +142,13 @@ const defaultResponsibilities: Omit<ResponsibilityItem, 'id'>[] = [
   { pageId: 'grades', pageLabel: 'Notes & Bulletins', role: 'responsable_college', canView: true, canEdit: true, canDelete: false, mission: 'Validation pédagogique et verrouillage des bulletins du collège avant émission trimestrielle.', lastUpdated: new Date().toISOString() },
   { pageId: 'discipline', pageLabel: 'Discipline & Sanctions', role: 'responsable_college', canView: true, canEdit: true, canDelete: false, mission: 'Suivi et enregistrement des heures de colle, des punitions et des conseils de discipline.', lastUpdated: new Date().toISOString() },
 
+  // Responsable Lycée / Proviseur
+  { pageId: 'dashboard', pageLabel: 'Tableau de Bord', role: 'responsable_lycee', canView: true, canEdit: false, canDelete: false, mission: 'Supervision stratégique et académique du Lycée / Secondaire (2nde à Terminale ou 6ème à Terminale), indicateurs du Baccalauréat et orientation.', lastUpdated: new Date().toISOString() },
+  { pageId: 'directory', pageLabel: 'Annuaire & Profils', role: 'responsable_lycee', canView: true, canEdit: true, canDelete: false, mission: 'Supervision des effectifs du secondaire, filières (Scientifique, Littéraire, Éco, etc.) et dossiers scolaires.', lastUpdated: new Date().toISOString() },
+  { pageId: 'messaging', pageLabel: 'Messagerie Intégrée', role: 'responsable_lycee', canView: true, canEdit: true, canDelete: false, mission: 'Communication avec le corps professoral du lycée, les délégations d\'élèves et les instances académiques.', lastUpdated: new Date().toISOString() },
+  { pageId: 'grades', pageLabel: 'Notes & Bulletins', role: 'responsable_lycee', canView: true, canEdit: true, canDelete: false, mission: 'Contrôle des moyennes trimestrielles/semestrielles, préparation des épreuves de Bac blanc et validation des livrets scolaires.', lastUpdated: new Date().toISOString() },
+  { pageId: 'discipline', pageLabel: 'Discipline & Sanctions', role: 'responsable_lycee', canView: true, canEdit: true, canDelete: false, mission: 'Présidence des conseils de discipline, validation des mesures conservatoires et assiduité en classes terminales.', lastUpdated: new Date().toISOString() },
+
   // Gestionnaire Comptable
   { pageId: 'dashboard', pageLabel: 'Tableau de Bord', role: 'gestionnaire_comptable', canView: true, canEdit: false, canDelete: false, mission: 'Visualisation synthétique des entrées de fonds, des factures émises et des alertes de caisse en temps réel.', lastUpdated: new Date().toISOString() },
   { pageId: 'finance', pageLabel: 'Suivi Financier', role: 'gestionnaire_comptable', canView: true, canEdit: true, canDelete: true, mission: 'Encaissement des frais scolaires, gestion des tableaux d\'échéanciers et contrôle budgétaire de l\'école.', lastUpdated: new Date().toISOString() },
@@ -183,6 +194,7 @@ export default function RoleResponsibilities() {
   const { t, tData } = useLanguage();
   const { notifySuccess, notifyError, notifyUpdate } = useNotification();
   const { currentUser } = useAuth();
+  const { currentEstablishment, isSuperAdmin, establishments, changeActiveEstablishment } = useEstablishment();
 
   const [items, setItems] = useState<ResponsibilityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -191,8 +203,13 @@ export default function RoleResponsibilities() {
   const [selectedPage, setSelectedPage] = useState<string>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Real-time users list from database
+  // Real-time users list strictly for the active establishment
   const [usersList, setUsersList] = useState<any[]>([]);
+
+  // Strict tenant ID resolution
+  const activeEstId = isSuperAdmin
+    ? (currentEstablishment?.id || currentUser?.etablissement || 'EDU-001')
+    : (currentUser?.etablissement || currentEstablishment?.id || 'EDU-001');
 
   // Custom editing states
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -209,166 +226,176 @@ export default function RoleResponsibilities() {
     mission: ''
   });
 
+  // 1. Real-time users listener strictly isolated to active establishment
   useEffect(() => {
     if (!isFirebaseConfigured) return;
     const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const u = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const u = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        .filter((user: any) => {
+          const userEst = user.etablissement || user.establishmentId || user.etablissementId;
+          if (!userEst) {
+            // Default unassigned users to EDU-001 only if activeEstId is EDU-001
+            return activeEstId === 'EDU-001';
+          }
+          return userEst === activeEstId;
+        });
       setUsersList(u);
     }, (err) => {
-      console.error("Error watching users for counts:", err);
+      console.error("Error watching users for establishment counts:", err);
     });
     return () => unsubscribeUsers();
-  }, []);
+  }, [activeEstId]);
+
+  const isSpecialResponsibility = (roleId: string) => [
+    'responsable_maternelle', 'responsable_primaire', 'responsable_college', 'responsable_lycee',
+    'gestionnaire_comptable', 'responsable_pedagogique', 'surveillant_general', 
+    'surveillant_adjoint', 'dame_menage', 'secretaire_generale', 
+    'secretaire_adjointe', 'responsable_it'
+  ].includes(roleId);
 
   const getRegisteredUserCount = (roleId: string) => {
-    const isResponsibility = [
-      'responsable_maternelle', 'responsable_primaire', 'responsable_college', 
-      'gestionnaire_comptable', 'responsable_pedagogique', 'surveillant_general', 
-      'surveillant_adjoint', 'dame_menage', 'secretaire_generale', 
-      'secretaire_adjointe', 'responsable_it'
-    ].includes(roleId);
-
-    return usersList.filter(user => {
-      const userRole = (user.role || '').toLowerCase();
-      const userResp = Array.isArray(user.responsibilities) ? user.responsibilities : [];
-      
-      if (roleId === 'admin') {
-        return userRole === 'admin';
-      }
-      if (roleId === 'personnel administratif') {
-        return userRole === 'personnel administratif';
-      }
-      if (roleId === 'enseignant') {
-        return userRole === 'enseignant';
-      }
-      if (roleId === 'élève' || roleId === 'eleve') {
-        return userRole === 'élève' || userRole === 'eleve';
-      }
-      if (roleId === 'parent') {
-        return userRole === 'parent';
-      }
-      if (roleId === 'cuisinier') {
-        return userRole === 'cuisinier' || userResp.includes('cuisinier');
-      }
-      
-      if (isResponsibility) {
-        return userResp.includes(roleId) || userRole === roleId;
-      }
-      
-      return userRole === roleId;
-    }).length;
+    return getUsersInRole(roleId).length;
   };
 
   const getUsersInRole = (roleId: string) => {
-    const isResponsibility = [
-      'responsable_maternelle', 'responsable_primaire', 'responsable_college', 
-      'gestionnaire_comptable', 'responsable_pedagogique', 'surveillant_general', 
-      'surveillant_adjoint', 'dame_menage', 'secretaire_generale', 
-      'secretaire_adjointe', 'responsable_it'
-    ].includes(roleId);
-
     return usersList.filter(user => {
-      const userRole = (user.role || '').toLowerCase();
+      const userRole = (user.role || '').toLowerCase().trim();
+      const userPreciseRole = (user.preciseRole || '').toLowerCase().trim();
       const userResp = Array.isArray(user.responsibilities) ? user.responsibilities : [];
+      const positionResps = user.position ? mapPositionToResponsibility(user.position) : [];
+      const allUserResps = Array.from(new Set([...userResp, ...positionResps]));
       
       if (roleId === 'admin') {
-        return userRole === 'admin';
+        return userRole === 'admin' || userPreciseRole === 'admin' || userPreciseRole === 'administrateur';
       }
       if (roleId === 'personnel administratif') {
-        return userRole === 'personnel administratif';
+        return userRole === 'personnel administratif' || 
+               userRole === 'secretaire' || 
+               userRole === 'comptable' || 
+               userRole === 'surveillant' || 
+               userRole === 'bibliothecaire' ||
+               userPreciseRole.includes('administratif');
       }
       if (roleId === 'enseignant') {
-        return userRole === 'enseignant';
+        return userRole === 'enseignant' || userRole === 'professeur' || userRole === 'prof';
       }
       if (roleId === 'élève' || roleId === 'eleve') {
-        return userRole === 'élève' || userRole === 'eleve';
+        return userRole === 'élève' || userRole === 'eleve' || userRole === 'etudiant' || userRole === 'étudiant';
       }
       if (roleId === 'parent') {
-        return userRole === 'parent';
+        return userRole === 'parent' || userRole === 'tuteur';
       }
       if (roleId === 'cuisinier') {
-        return userRole === 'cuisinier' || userResp.includes('cuisinier');
+        return userRole === 'cuisinier' || allUserResps.includes('cuisinier');
       }
       
-      if (isResponsibility) {
-        return userResp.includes(roleId) || userRole === roleId;
+      if (isSpecialResponsibility(roleId)) {
+        return allUserResps.includes(roleId) || userRole === roleId;
       }
       
       return userRole === roleId;
     });
   };
 
+  // 2. Real-time Role Responsibilities rules listener scoped to active establishment
   useEffect(() => {
     if (!isFirebaseConfigured) {
-      // Offline fallback: load from standard localStorage with defaults
-      const saved = localStorage.getItem('role_responsibilities_local');
+      // Offline fallback: load from localStorage with establishment key
+      const localKey = `role_responsibilities_local_${activeEstId}`;
+      const saved = localStorage.getItem(localKey) || localStorage.getItem('role_responsibilities_local');
       if (saved) {
         const loadedLocal = JSON.parse(saved) as ResponsibilityItem[];
-        const loadedIds = new Set(loadedLocal.map(item => item.id));
-        const missingDefaults = defaultResponsibilities
-          .map(r => ({ id: `${r.role}_${r.pageId}`, ...r } as ResponsibilityItem))
-          .filter(r => !loadedIds.has(r.id));
-        
-        if (missingDefaults.length > 0) {
-          const merged = [...loadedLocal, ...missingDefaults];
-          localStorage.setItem('role_responsibilities_local', JSON.stringify(merged));
-          setItems(merged);
-        } else {
-          setItems(loadedLocal);
-        }
+        setItems(loadedLocal);
       } else {
         const withIds = defaultResponsibilities.map(r => ({
-          id: `${r.role}_${r.pageId}`,
+          id: `${activeEstId}_${r.role}_${r.pageId}`,
+          etablissement: activeEstId,
           ...r
         }));
-        localStorage.setItem('role_responsibilities_local', JSON.stringify(withIds));
+        localStorage.setItem(localKey, JSON.stringify(withIds));
         setItems(withIds);
       }
       setLoading(false);
       return;
     }
 
-    const unsubscribe = onSnapshot(collection(db, 'role_responsibilities'), async (snapshot) => {
-      const loaded = snapshot.docs.map(doc => ({
+    setLoading(true);
+
+    const q = query(collection(db, 'role_responsibilities'), where('etablissement', '==', activeEstId));
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      let loaded = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as ResponsibilityItem));
 
-      const loadedIds = new Set(loaded.map(item => item.id));
-      const missingDefaults = defaultResponsibilities.filter(r => !loadedIds.has(`${r.role}_${r.pageId}`));
+      // If this establishment does not have custom records yet, bootstrap them in real-time
+      if (loaded.length === 0) {
+        try {
+          const batch = writeBatch(db);
+          const bootstrapped: ResponsibilityItem[] = [];
+          defaultResponsibilities.forEach(r => {
+            const docId = `${activeEstId}_${r.role}_${r.pageId}`;
+            const ref = doc(db, 'role_responsibilities', docId);
+            const itemToSave = { 
+              ...r, 
+              id: docId, 
+              etablissement: activeEstId,
+              lastUpdated: new Date().toISOString()
+            };
+            batch.set(ref, itemToSave);
+            bootstrapped.push(itemToSave);
+          });
+          await batch.commit();
+          setItems(bootstrapped);
+          setLoading(false);
+          return;
+        } catch (err) {
+          console.error("Bootstrapping permissions for establishment failed:", err);
+        }
+      }
+
+      // Check if any default items are missing for this establishment
+      const loadedRolesPages = new Set(loaded.map(item => `${item.role}_${item.pageId}`));
+      const missingDefaults = defaultResponsibilities.filter(r => !loadedRolesPages.has(`${r.role}_${r.pageId}`));
 
       if (missingDefaults.length > 0) {
-        // We have missing roles configurations, write them to Firestore
         try {
           const batch = writeBatch(db);
           missingDefaults.forEach(r => {
-            const id = `${r.role}_${r.pageId}`;
-            const ref = doc(db, 'role_responsibilities', id);
-            batch.set(ref, r);
+            const docId = `${activeEstId}_${r.role}_${r.pageId}`;
+            const ref = doc(db, 'role_responsibilities', docId);
+            const itemToSave = { 
+              ...r, 
+              id: docId, 
+              etablissement: activeEstId,
+              lastUpdated: new Date().toISOString()
+            };
+            batch.set(ref, itemToSave, { merge: true });
+            loaded.push(itemToSave);
           });
           await batch.commit();
         } catch (err) {
-          console.error("Bootstrapping missing permissions failed:", err);
-          setItems(loaded);
-          setLoading(false);
+          console.error("Adding missing establishment default rules failed:", err);
         }
-      } else {
-        setItems(loaded);
-        setLoading(false);
       }
+
+      setItems(loaded);
+      setLoading(false);
     }, (error) => {
-      console.error("Error watching role responsibilities:", error);
+      console.error("Error watching establishment role responsibilities:", error);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [activeEstId]);
 
   const handleUpdatePermission = async (item: ResponsibilityItem, field: 'canView' | 'canEdit' | 'canDelete', val: boolean) => {
-    const updated = { ...item, [field]: val, lastUpdated: new Date().toISOString() };
+    const updated = { ...item, [field]: val, lastUpdated: new Date().toISOString(), etablissement: activeEstId };
     
     // Optimistic UI updates
     setItems(prev => prev.map(i => i.id === item.id ? updated : i));
@@ -376,15 +403,16 @@ export default function RoleResponsibilities() {
     if (isFirebaseConfigured) {
       try {
         const ref = doc(db, 'role_responsibilities', item.id);
-        await setDoc(ref, { [field]: val, lastUpdated: new Date().toISOString() }, { merge: true });
-        notifySuccess("Règle mise à jour !");
+        await setDoc(ref, { [field]: val, lastUpdated: new Date().toISOString(), etablissement: activeEstId }, { merge: true });
+        notifySuccess("Règle mise à jour en temps réel !");
       } catch (err) {
         notifyError("Erreur lors de la mise à jour");
         console.error(err);
       }
     } else {
+      const localKey = `role_responsibilities_local_${activeEstId}`;
       const all = items.map(i => i.id === item.id ? updated : i);
-      localStorage.setItem('role_responsibilities_local', JSON.stringify(all));
+      localStorage.setItem(localKey, JSON.stringify(all));
       notifySuccess("Règle mise à jour localement !");
     }
   };
@@ -392,21 +420,22 @@ export default function RoleResponsibilities() {
   const handleSaveMission = async (itemId: string) => {
     if (!editingMissionText.trim()) return;
     
-    setItems(prev => prev.map(i => i.id === itemId ? { ...i, mission: editingMissionText, lastUpdated: new Date().toISOString() } : i));
+    setItems(prev => prev.map(i => i.id === itemId ? { ...i, mission: editingMissionText, lastUpdated: new Date().toISOString(), etablissement: activeEstId } : i));
     setEditingItemId(null);
 
     if (isFirebaseConfigured) {
       try {
         const ref = doc(db, 'role_responsibilities', itemId);
-        await updateDoc(ref, { mission: editingMissionText, lastUpdated: new Date().toISOString() });
-        notifySuccess("Mission mise à jour !");
+        await updateDoc(ref, { mission: editingMissionText, lastUpdated: new Date().toISOString(), etablissement: activeEstId });
+        notifySuccess("Mission mise à jour en temps réel !");
       } catch (err) {
         notifyError("Erreur d'édition");
         console.error(err);
       }
     } else {
-      const all = items.map(i => i.id === itemId ? { ...i, mission: editingMissionText, lastUpdated: new Date().toISOString() } : i);
-      localStorage.setItem('role_responsibilities_local', JSON.stringify(all));
+      const localKey = `role_responsibilities_local_${activeEstId}`;
+      const all = items.map(i => i.id === itemId ? { ...i, mission: editingMissionText, lastUpdated: new Date().toISOString(), etablissement: activeEstId } : i);
+      localStorage.setItem(localKey, JSON.stringify(all));
       notifySuccess("Mission mise à jour localement !");
     }
   };
@@ -420,7 +449,7 @@ export default function RoleResponsibilities() {
 
     const matchedPage = systemPages.find(p => p.id === newItem.pageId);
     const pageLabel = matchedPage ? matchedPage.label : newItem.pageId;
-    const generatedId = `${newItem.role}_${newItem.pageId}`;
+    const generatedId = `${activeEstId}_${newItem.role}_${newItem.pageId}`;
 
     const createdRecord: ResponsibilityItem = {
       id: generatedId,
@@ -431,7 +460,8 @@ export default function RoleResponsibilities() {
       canEdit: newItem.canEdit,
       canDelete: newItem.canDelete,
       mission: newItem.mission,
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
+      etablissement: activeEstId
     };
 
     setItems(prev => [createdRecord, ...prev.filter(i => i.id !== generatedId)]);
@@ -439,24 +469,16 @@ export default function RoleResponsibilities() {
 
     if (isFirebaseConfigured) {
       try {
-        await setDoc(doc(db, 'role_responsibilities', generatedId), {
-          pageId: newItem.pageId,
-          pageLabel,
-          role: newItem.role,
-          canView: newItem.canView,
-          canEdit: newItem.canEdit,
-          canDelete: newItem.canDelete,
-          mission: newItem.mission,
-          lastUpdated: new Date().toISOString()
-        });
+        await setDoc(doc(db, 'role_responsibilities', generatedId), createdRecord);
         notifySuccess("Responsabilité ajoutée en temps réel !");
       } catch (err) {
         console.error(err);
         notifyError("Erreur d'ajout.");
       }
     } else {
+      const localKey = `role_responsibilities_local_${activeEstId}`;
       const updatedList = [createdRecord, ...items.filter(i => i.id !== generatedId)];
-      localStorage.setItem('role_responsibilities_local', JSON.stringify(updatedList));
+      localStorage.setItem(localKey, JSON.stringify(updatedList));
       notifySuccess("Responsabilité ajoutée localement !");
     }
 
@@ -472,52 +494,65 @@ export default function RoleResponsibilities() {
   };
 
   const handleDeleteResponsibility = async (id: string) => {
-    if (!window.confirm("Voulez-vous supprimer cette fiche de responsabilité ?")) return;
+    if (!window.confirm("Voulez-vous supprimer cette fiche de responsabilité pour votre établissement ?")) return;
 
     setItems(prev => prev.filter(i => i.id !== id));
     if (isFirebaseConfigured) {
       try {
         await deleteDoc(doc(db, 'role_responsibilities', id));
-        notifySuccess("Responsabilité supprimée !");
+        notifySuccess("Responsabilité supprimée en temps réel !");
       } catch (err) {
         console.error(err);
         notifyError("Échec de suppression.");
       }
     } else {
+      const localKey = `role_responsibilities_local_${activeEstId}`;
       const updated = items.filter(i => i.id !== id);
-      localStorage.setItem('role_responsibilities_local', JSON.stringify(updated));
+      localStorage.setItem(localKey, JSON.stringify(updated));
       notifySuccess("Responsabilité supprimée localement !");
     }
   };
 
   const handleResetToDefaults = async () => {
-    if (!window.confirm("Êtes-vous sûr de vouloir restaurer les responsabilités usine par défaut ?")) return;
+    if (!window.confirm(`Êtes-vous sûr de vouloir restaurer les responsabilités usine par défaut pour "${currentEstablishment?.nom || activeEstId}" ?`)) return;
     
     setLoading(true);
     if (isFirebaseConfigured) {
       try {
-        const querySnap = await getDocs(collection(db, 'role_responsibilities'));
+        const q = query(collection(db, 'role_responsibilities'), where('etablissement', '==', activeEstId));
+        const querySnap = await getDocs(q);
         const batch = writeBatch(db);
-        querySnap.docs.forEach(doc => batch.delete(doc.ref));
+        querySnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
         await batch.commit();
 
         const reBatch = writeBatch(db);
+        const freshItems: ResponsibilityItem[] = [];
         defaultResponsibilities.forEach(r => {
-          const id = `${r.role}_${r.pageId}`;
-          reBatch.set(doc(db, 'role_responsibilities', id), r);
+          const docId = `${activeEstId}_${r.role}_${r.pageId}`;
+          const itemToSave: ResponsibilityItem = {
+            id: docId,
+            ...r,
+            etablissement: activeEstId,
+            lastUpdated: new Date().toISOString()
+          };
+          reBatch.set(doc(db, 'role_responsibilities', docId), itemToSave);
+          freshItems.push(itemToSave);
         });
         await reBatch.commit();
-        notifySuccess("Réinitialisé avec succès !");
+        setItems(freshItems);
+        notifySuccess("Responsabilités réinitialisées en temps réel pour cet établissement !");
       } catch (err) {
         console.error(err);
         notifyError("Erreur de réinitialisation");
       }
     } else {
       const withIds = defaultResponsibilities.map(r => ({
-        id: `${r.role}_${r.pageId}`,
+        id: `${activeEstId}_${r.role}_${r.pageId}`,
+        etablissement: activeEstId,
         ...r
       }));
-      localStorage.setItem('role_responsibilities_local', JSON.stringify(withIds));
+      const localKey = `role_responsibilities_local_${activeEstId}`;
+      localStorage.setItem(localKey, JSON.stringify(withIds));
       setItems(withIds);
       notifySuccess("Réinitialisé localement !");
     }
@@ -541,6 +576,52 @@ export default function RoleResponsibilities() {
 
   return (
     <div className="space-y-6">
+
+      {/* Dynamic Establishment Banner / Campus Context */}
+      <div className="bg-gradient-to-r from-indigo-900 to-indigo-800 text-white rounded-3xl p-5 shadow-sm border border-indigo-700/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-white/10 rounded-2xl backdrop-blur-xs text-indigo-200">
+            <Building2 size={24} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 bg-white/10 px-2 py-0.5 rounded-full">
+                Isolation Établissement Active
+              </span>
+              {isSuperAdmin && (
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 bg-amber-400/20 px-2 py-0.5 rounded-full">
+                  Super Admin
+                </span>
+              )}
+            </div>
+            <h2 className="text-lg font-black text-white tracking-tight mt-0.5">
+              {currentEstablishment?.nom || `Établissement ${activeEstId}`}
+            </h2>
+            <p className="text-xs text-indigo-200">
+              Effectifs et fiches de responsabilités enregistrés en temps réel strictement pour ce campus.
+            </p>
+          </div>
+        </div>
+
+        {/* Super Admin Switcher if multiple campuses */}
+        {isSuperAdmin && establishments && establishments.length > 1 && (
+          <div className="flex items-center gap-2 bg-black/20 p-1.5 rounded-2xl border border-white/10">
+            <span className="text-xs text-indigo-200 pl-2 font-medium">Campus :</span>
+            <select
+              value={activeEstId}
+              onChange={(e) => changeActiveEstablishment(e.target.value)}
+              aria-label="Sélectionner le campus à configurer"
+              className="bg-indigo-950/80 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-indigo-500/30 outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
+            >
+              {establishments.map(est => (
+                <option key={est.id} value={est.id} className="bg-gray-900 text-white">
+                  {est.nom} ({est.code || est.id})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
       
       {/* Top Controls Grid */}
       <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 border border-gray-100 dark:border-gray-750 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -691,7 +772,7 @@ export default function RoleResponsibilities() {
               
               {getUsersInRole(selectedRole).length === 0 ? (
                 <div className="text-center py-5 text-xs text-gray-500 dark:text-gray-400 bg-white/70 dark:bg-gray-800/70 rounded-2xl border border-dashed border-gray-150 dark:border-gray-700">
-                  Aucun compte d'utilisateur n'est actuellement enregistré avec le rôle ou la responsabilité "<span className="font-bold text-indigo-600 dark:text-indigo-400 capitalize">{systemRoles.find(r => r.id === selectedRole)?.label || selectedRole}</span>" dans la base de données du Gabon. Vous pouvez ajouter des membres dans le personnel administratif.
+                  Aucun compte d'utilisateur n'est actuellement enregistré avec le rôle ou la responsabilité "<span className="font-bold text-indigo-600 dark:text-indigo-400 capitalize">{systemRoles.find(r => r.id === selectedRole)?.label || selectedRole}</span>" dans l'établissement <span className="font-bold text-gray-900 dark:text-white">{currentEstablishment?.nom || activeEstId}</span>. Vous pouvez ajouter des membres dans le personnel administratif de votre établissement.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
