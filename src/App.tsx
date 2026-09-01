@@ -1,370 +1,241 @@
 import React, { useState, useEffect } from "react";
-import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
-import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
-import { NotificationProvider, useNotification } from "./contexts/NotificationContext";
-import { EstablishmentProvider } from "./contexts/EstablishmentContext";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-
-// Components
+import { useAuth } from "./contexts/AuthContext";
+import { useEstablishment } from "./contexts/EstablishmentContext";
+import Login from "./pages/Login";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
-import Footer from "./components/Footer";
-import MandatoryPasswordChange from "./components/MandatoryPasswordChange";
 import PWAPrompt from "./components/PWAPrompt";
-import ReloadPrompt from "./components/ReloadPrompt";
-import InternetConnectionGuard from "./components/InternetConnectionGuard";
-
-// Pages
-import AIAssistant from "./pages/AIAssistant";
-import About from "./pages/About";
-import Attendance from "./pages/Attendance";
-import AuditLogs from "./pages/AuditLogs";
-import BiometricRegistration from "./pages/BiometricRegistration";
-import Calendar from "./pages/Calendar";
-import Canteen from "./pages/Canteen";
-import CanteenDashboard from "./pages/CanteenDashboard";
-import Chat from "./pages/Chat";
-import Classes from "./pages/Classes";
-import Classroom from "./pages/Classroom";
-import Clubs from "./pages/Clubs";
-import CoursesSubjects from "./pages/CoursesSubjects";
-import Dashboard from "./pages/Dashboard";
-import DigitalBinder from "./pages/DigitalBinder";
-import Directory from "./pages/Directory";
-import Discipline from "./pages/Discipline";
-import DocumentGenerator from "./pages/DocumentGenerator";
-import Establishments from "./pages/Establishments";
-import Finance from "./pages/Finance";
-import Grades from "./pages/Grades";
-import Homework from "./pages/Homework";
-import Houses from "./pages/Houses";
-import IntegrationCode from "./pages/IntegrationCode";
-import KioskMode from "./pages/KioskMode";
-import Leaderboard from "./pages/Leaderboard";
-import Library from "./pages/Library";
-import Login from "./pages/Login";
-import LudoAIPlus from "./pages/LudoAIPlus";
-import Messaging from "./pages/Messaging";
-import MobileApp from "./pages/MobileApp";
-import NewsFeed from "./pages/NewsFeed";
-import ParentDashboard from "./pages/ParentDashboard";
-import Profile from "./pages/Profile";
 import RecentConnections from "./pages/RecentConnections";
-import Reports from "./pages/Reports";
-import ResponsibilityZones from "./pages/ResponsibilityZones";
-import Scanner from "./pages/Scanner";
-import Settings from "./pages/Settings";
-import Staff from "./pages/Staff";
-import StrategicOptimizations from "./pages/StrategicOptimizations";
-import StudentCard from "./pages/StudentCard";
-import StudentDashboard from "./pages/StudentDashboard";
-import Surveys from "./pages/Surveys";
+import Dashboard from "./pages/Dashboard";
+import Attendance from "./pages/Attendance";
+import Grades from "./pages/Grades";
 import TeacherPlanning from "./pages/TeacherPlanning";
-import TermsAndConditions from "./pages/TermsAndConditions";
+import Homework from "./pages/Homework";
 import Users from "./pages/Users";
+import Settings from "./pages/Settings";
 import Parents from "./pages/Parents";
-import AccessControl from "./pages/AccessControl";
-import DossiersAgents from "./pages/DossiersAgents";
+import Discipline from "./pages/Discipline";
+import Library from "./pages/Library";
+import Canteen from "./pages/Canteen";
+import Clubs from "./pages/Clubs";
+import Establishments from "./pages/Establishments";
+import StudentDashboard from "./pages/StudentDashboard";
+import ParentDashboard from "./pages/ParentDashboard";
+import DocumentGenerator from "./pages/DocumentGenerator";
+import Scanner from "./pages/Scanner";
+import MobileApp from "./pages/MobileApp";
+import Chat from "./pages/Chat";
+import Trash from "./pages/Trash";
+import About from "./pages/About";
+import TermsAndConditions from "./pages/TermsAndConditions";
 import TechSheet from "./pages/TechSheet";
-import { Trash } from "./pages/Trash";
+import AccessControl from "./pages/AccessControl";
+import BiometricRegistration from "./pages/BiometricRegistration";
+import KioskMode from "./pages/KioskMode";
+import Houses from "./pages/Houses";
+import AIAssistant from "./pages/AIAssistant";
+import LudoAIPlus from "./pages/LudoAIPlus";
+import IntegrationCode from "./pages/IntegrationCode";
+import Profile from "./pages/Profile";
+import StrategicOptimizations from "./pages/StrategicOptimizations";
+import CoursesSubjects from "./pages/CoursesSubjects";
+import ResponsibilityZones from "./pages/ResponsibilityZones";
+import StudentCard from "./pages/StudentCard";
+import Leaderboard from "./pages/Leaderboard";
+import NewsFeed from "./pages/NewsFeed";
+import DigitalBinder from "./pages/DigitalBinder";
+import Staff from "./pages/Staff";
+import DossiersAgents from "./pages/DossiersAgents";
+import CanteenDashboard from "./pages/CanteenDashboard";
+import Finance from "./pages/Finance";
+import AuditLogs from "./pages/AuditLogs";
+import Surveys from "./pages/Surveys";
+import Directory from "./pages/Directory";
+import CalendarPage from "./pages/Calendar";
+import Reports from "./pages/Reports";
+import Classroom from "./pages/Classroom";
+import Messaging from "./pages/Messaging";
+import MaintenanceService from "./services/MaintenanceService";
 
-function AppContent() {
+export default function App() {
   const { currentUser, loading } = useAuth();
-  const { theme } = useTheme();
-  const { t } = useLanguage();
-  const { notifySuccess, notifyError } = useNotification();
-  
-  // Navigation states
-  const [activeTab, setActiveTab] = useState<string>("dashboard");
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [chatTargetId, setChatTargetId] = useState<string | null>(null);
-  const [prepId, setPrepId] = useState<any>(null);
-  const [classroomName, setClassroomName] = useState<any>(null);
+  const { currentEstablishment } = useEstablishment();
+  const [currentTab, setCurrentTab] = useState<string>("dashboard");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
-  // Set default tab on user login based on role
+  // Initialisation du service de maintenance automatique
+  useEffect(() => {
+    MaintenanceService.initMaintenance();
+  }, []);
+
+  // Définition de l'onglet par défaut selon le rôle
   useEffect(() => {
     if (currentUser) {
-      if (currentUser.role === "élève") {
-        setActiveTab("student_dashboard");
+      if (currentUser.role === "eleve") {
+        setCurrentTab("student_dashboard");
       } else if (currentUser.role === "parent") {
-        setActiveTab("dashboard");
-      } else if (currentUser.role === "cuisinier") {
-        setActiveTab("dashboard");
+        setCurrentTab("parent_dashboard");
       } else {
-        setActiveTab("dashboard");
+        setCurrentTab("dashboard");
       }
     }
   }, [currentUser]);
 
-  // Handle browser and mobile back button navigation via PopStateEvent
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const handlePopState = (event: PopStateEvent) => {
-      if (event.state && event.state.tab) {
-        setActiveTab(event.state.tab);
-        setPrepId(event.state.prepId ?? null);
-        setClassroomName(event.state.classroomName ?? null);
-        setChatTargetId(event.state.chatTargetId ?? null);
-      } else {
-        const defaultTab = currentUser.role === "élève" ? "student_dashboard" : "dashboard";
-        setActiveTab(defaultTab);
-        setPrepId(null);
-        setClassroomName(null);
-        setChatTargetId(null);
-      }
-    };
-
-    window.addEventListener("popstate", handlePopState);
-
-    // Initialize/Replace the initial entry in history if it doesn't exist yet
-    const defaultTab = currentUser.role === "élève" ? "student_dashboard" : "dashboard";
-    if (!window.history.state) {
-      window.history.replaceState({ tab: defaultTab, prepId: null, classroomName: null, chatTargetId: null }, "");
-    }
-
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-    };
-  }, [currentUser]);
-
-  // Synchronize state changes into browser history so back buttons work flawlessly
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const currentState = window.history.state;
-    
-    // Ignore pushing navigation state on top of custom overlay modals like notification details
-    if (currentState?.modal) return;
-
-    const shouldPush = !currentState || 
-                       currentState.tab !== activeTab || 
-                       currentState.prepId !== prepId ||
-                       currentState.classroomName !== classroomName ||
-                       currentState.chatTargetId !== chatTargetId;
-
-    if (shouldPush) {
-      window.history.pushState(
-        { tab: activeTab, prepId, classroomName, chatTargetId },
-        ""
-      );
-    }
-  }, [activeTab, prepId, classroomName, chatTargetId, currentUser]);
-
-  // Navigate function passed to components
-  const handleNavigate = (tab: string, params?: any) => {
-    setActiveTab(tab);
-    if (tab === "courses_subjects" && params?.prepId) {
-      setPrepId(params.prepId);
-    }
-    if (tab === "classroom" && params?.className) {
-      setClassroomName(params.className);
-    }
-    if (tab === "messaging" && params?.chatTargetId) {
-      setChatTargetId(params.chatTargetId);
-    }
-  };
-
-  // Render loading state
   if (loading) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-        <div className="relative flex items-center justify-center">
-          <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-          <div className="absolute text-indigo-600 font-black text-xl">EN</div>
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-900 text-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+          <p className="text-sm font-medium tracking-wide text-slate-400">
+            Chargement de la plateforme...
+          </p>
         </div>
-        <p className="mt-4 text-sm font-bold text-gray-700 dark:text-gray-300 animate-pulse">
-          Chargement de l'écosystème Edu-Nify...
-        </p>
       </div>
     );
   }
 
-  // Render login page if not logged in
   if (!currentUser) {
     return <Login />;
   }
 
-  // Enforce password change if flagged
-  if (currentUser.mustChangePassword) {
-    return <MandatoryPasswordChange />;
-  }
-
-  // Render selected tab / page
-  const renderPage = () => {
-    // If pupil tries to view something restricted, or parents have specific landing
-    const role = currentUser.role;
-
-    // Special redirection: if a parent is on an integrated tab, we map them to ParentDashboard with the correct initial sub-tab
-    if (role === "parent") {
-      const parentTabs = ["dashboard", "grades", "homework", "planning", "finance"];
-      if (parentTabs.includes(activeTab)) {
-        let initialTab: 'overview' | 'grades' | 'attendance' | 'homework' | 'courses' | 'timetable' | 'finance' = 'overview';
-        if (activeTab === 'grades') initialTab = 'grades';
-        else if (activeTab === 'homework') initialTab = 'homework';
-        else if (activeTab === 'planning') initialTab = 'timetable';
-        else if (activeTab === 'finance') initialTab = 'finance';
-        return <ParentDashboard onNavigate={handleNavigate} initialTab={initialTab} />;
-      }
-    }
-
-    // Direct mapping
-    switch (activeTab) {
+  // Rendu de l'écran actif
+  const renderContent = () => {
+    switch (currentTab) {
       case "dashboard":
-        return <Dashboard onNavigate={handleNavigate} />;
-      case "student_dashboard":
-        return <StudentDashboard onNavigate={handleNavigate} />;
-      case "newsfeed":
-        return <NewsFeed />;
-      case "directory":
-        return <Directory onNavigate={handleNavigate} />;
-      case "messaging":
-        return (
-          <Messaging
-            initialChatTargetId={chatTargetId || undefined}
-            onClearTarget={() => setChatTargetId(null)}
-          />
+        return currentUser.role === "eleve" ? (
+          <StudentDashboard />
+        ) : currentUser.role === "parent" ? (
+          <ParentDashboard />
+        ) : (
+          <Dashboard onNavigate={setCurrentTab} />
         );
-      case "profile":
-        return <Profile />;
-      case "about":
-        return <About />;
-      case "terms":
-        return <TermsAndConditions />;
-      case "digital_binder":
-        return <DigitalBinder onNavigate={handleNavigate} />;
-      case "classroom":
-        return <Classroom initialClassName={classroomName} />;
-      case "homework":
-        return <Homework />;
-      case "grades":
-        return <Grades />;
-      case "ludo_ai_plus":
-        return <LudoAIPlus />;
-      case "courses_subjects":
-        return <CoursesSubjects initialPrepId={prepId} />;
-      case "ai_assistant":
-        return <AIAssistant onNavigate={handleNavigate} />;
-      case "classes":
-        return <Classes />;
-      case "planning":
-        return <TeacherPlanning />;
-      case "calendar":
-        return <Calendar />;
+      case "student_dashboard":
+        return <StudentDashboard />;
+      case "parent_dashboard":
+        return <ParentDashboard />;
       case "attendance":
         return <Attendance />;
-      case "reports":
-        return <Reports />;
-      case "student_card":
-        return <StudentCard />;
-      case "houses":
-        return <Houses />;
-      case "clubs":
-        return <Clubs />;
-      case "leaderboard":
-        return <Leaderboard />;
-      case "library":
-        return <Library />;
-      case "canteen":
-        return <Canteen />;
-      case "surveys":
-        return <Surveys />;
-      case "establishments":
-        return <Establishments />;
+      case "grades":
+        return <Grades />;
+      case "planning":
+      case "teacher_planning":
+        return <TeacherPlanning />;
+      case "homework":
+        return <Homework />;
       case "users":
         return <Users />;
       case "parents":
         return <Parents />;
-      case "access_control":
-        return <AccessControl />;
-      case "staff":
-        return <Staff />;
-      case "responsibility_zones":
-        return <ResponsibilityZones />;
-      case "document_generator":
-        return <DocumentGenerator />;
-      case "finance":
-        return <Finance />;
       case "discipline":
         return <Discipline />;
-      case "strategic_optimizations":
-        return <StrategicOptimizations />;
-      case "recent_connections":
-        return <RecentConnections />;
-      case "audit_logs":
-        return <AuditLogs />;
-      case "scanner":
-        return <Scanner />;
-      case "kiosk":
-        return <KioskMode onExit={() => setActiveTab(currentUser.role === "élève" ? "student_dashboard" : "dashboard")} />;
-      case "mobile_app":
-        return <MobileApp />;
-      case "integration":
-        return <IntegrationCode />;
-      case "settings":
-        return <Settings />;
+      case "library":
+        return <Library />;
+      case "canteen":
+        return <Canteen />;
+      case "canteen_dashboard":
+        return <CanteenDashboard />;
+      case "clubs":
+        return <Clubs />;
+      case "finance":
+        return <Finance />;
+      case "staff":
+        return <Staff />;
       case "dossiers_agents":
         return <DossiersAgents />;
+      case "establishments":
+        return <Establishments />;
+      case "documents":
+        return <DocumentGenerator />;
+      case "scanner":
+        return <Scanner />;
+      case "mobile_app":
+        return <MobileApp />;
+      case "chat":
+        return <Chat />;
+      case "messaging":
+        return <Messaging />;
+      case "trash":
+        return <Trash />;
+      case "about":
+        return <About />;
+      case "terms":
+        return <TermsAndConditions />;
       case "tech_sheet":
         return <TechSheet />;
-      case "trash":
-        return <Trash currentUser={currentUser} notifySuccess={notifySuccess} notifyError={notifyError} />;
+      case "access_control":
+        return <AccessControl />;
+      case "biometric":
+        return <BiometricRegistration />;
+      case "kiosk":
+        return <KioskMode />;
+      case "houses":
+        return <Houses />;
+      case "ai_assistant":
+        return <AIAssistant />;
+      case "ludo_ai_plus":
+        return <LudoAIPlus />;
+      case "integration_code":
+        return <IntegrationCode />;
+      case "profile":
+        return <Profile />;
+      case "optimizations":
+        return <StrategicOptimizations />;
+      case "courses_subjects":
+        return <CoursesSubjects />;
+      case "zones":
+        return <ResponsibilityZones />;
+      case "student_card":
+        return <StudentCard />;
+      case "leaderboard":
+        return <Leaderboard />;
+      case "news_feed":
+        return <NewsFeed />;
+      case "digital_binder":
+        return <DigitalBinder />;
+      case "audit_logs":
+        return <AuditLogs />;
+      case "surveys":
+        return <Surveys />;
+      case "directory":
+        return <Directory />;
+      case "calendar":
+        return <CalendarPage />;
+      case "reports":
+        return <Reports />;
+      case "classroom":
+        return <Classroom />;
+      case "recent_connections":
+        return <RecentConnections />;
+      case "settings":
+        return <Settings />;
       default:
-        return (
-          <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Page Non Trouvée</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">La page "{activeTab}" n'est pas encore disponible.</p>
-          </div>
-        );
+        return <Dashboard onNavigate={setCurrentTab} />;
     }
   };
 
-  // Full dashboard layout
   return (
-    <div className={`min-h-screen flex bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-200`}>
-      {/* Sidebar navigation */}
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-hidden font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+      <PWAPrompt />
       <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        isMobileOpen={isMobileOpen}
-        setIsMobileOpen={setIsMobileOpen}
+        currentTab={currentTab}
+        setCurrentTab={setCurrentTab}
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
       />
 
-      {/* Main Workspace */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          onMenuClick={() => setIsMobileOpen(true)}
+          onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+          onNavigate={setCurrentTab}
+          currentTab={currentTab}
         />
 
-        {/* Content Section */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl w-full mx-auto print:p-0">
-          {renderPage()}
-          <Footer onNavigate={handleNavigate} />
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-slate-50/50 dark:bg-slate-900/50">
+          <div className="max-w-7xl mx-auto space-y-6">
+            {renderContent()}
+          </div>
         </main>
       </div>
-
-      {/* PWAPrompt & ReloadPrompt */}
-      <PWAPrompt />
-      <ReloadPrompt />
     </div>
-  );
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <LanguageProvider>
-        <AuthProvider>
-          <NotificationProvider>
-            <EstablishmentProvider>
-              <InternetConnectionGuard />
-              <AppContent />
-            </EstablishmentProvider>
-          </NotificationProvider>
-        </AuthProvider>
-      </LanguageProvider>
-    </ThemeProvider>
   );
 }
