@@ -31,17 +31,21 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
 import { User, Dossier, Message } from "../types";
-
-
+import { useAuth } from "../contexts/AuthContext";
+import { useEstablishment } from "../contexts/EstablishmentContext";
 
 export default function App() {
-  // Real-time user state (defaulting to the admin user Martinien Mvezogo)
+  const { currentUser: authUser } = useAuth();
+  const { currentEstablishment } = useEstablishment();
+  const activeEstId = currentEstablishment?.id || authUser?.etablissement || 'EDU-001';
+
+  // Real-time user state
   const [currentUser, setCurrentUser] = useState<User>({
-    nom: "Mvezogo",
-    prenom: "Martinien",
-    role: "admin",
-    matricule: "MVL2026",
-    biographie: "Ingénieur en Développement de Solutions Digitales."
+    nom: authUser?.nom || "Mvezogo",
+    prenom: authUser?.prenom || "Martinien",
+    role: authUser?.role || "admin",
+    matricule: (authUser as any)?.matricule || "MVL2026",
+    biographie: (authUser as any)?.biographie || "Ingénieur en Développement de Solutions Digitales."
   });
 
   const [dossiers, setDossiers] = useState<Dossier[]>([]);
@@ -64,45 +68,39 @@ export default function App() {
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Listen to real-time user name and info from Firestore
+  // 1. Update user info from auth user if available
   useEffect(() => {
-    const userDocRef = doc(db, "users", "ECbTecvkpYYbSkNgu2UBdkMEr6s2");
-    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setCurrentUser({
-          nom: data.nom || "Mvezogo",
-          prenom: data.prenom || "Martinien",
-          role: data.role || "admin",
-          matricule: data.matricule || "MVL2026",
-          biographie: data.biographie || "",
-          status: data.status || "online",
-          diploma: data.diploma || "Master 2"
-        });
-      }
-    }, (error) => {
-      console.error("Error listening to user doc:", error);
-    });
+    if (authUser) {
+      setCurrentUser({
+        nom: authUser.nom || "Utilisateur",
+        prenom: authUser.prenom || "",
+        role: authUser.role || "admin",
+        matricule: (authUser as any).matricule || "MAT-001",
+        biographie: (authUser as any).biographie || "",
+        status: authUser.status || "online",
+        diploma: (authUser as any).diploma || "Master"
+      });
+    }
+  }, [authUser]);
 
-    return () => unsubscribe();
-  }, []);
-
-  // 2. Listen to real-time dossiers list from Firestore
+  // 2. Listen to real-time dossiers list from Firestore filtered by establishment
   useEffect(() => {
     const dossiersColRef = collection(db, "dossiers");
     const unsubscribe = onSnapshot(dossiersColRef, (querySnapshot) => {
       const items: Dossier[] = [];
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data();
-        items.push({
-          id: docSnap.id,
-          title: data.title || "Sans titre",
-          category: data.category || "Orientation",
-          agentRole: data.agentRole || "orientation",
-          description: data.description || "",
-          createdAt: data.createdAt || new Date().toISOString(),
-          userName: data.userName || "Martinien Mvezogo"
-        });
+        if ((data.etablissement || 'EDU-001') === activeEstId) {
+          items.push({
+            id: docSnap.id,
+            title: data.title || "Sans titre",
+            category: data.category || "Orientation",
+            agentRole: data.agentRole || "orientation",
+            description: data.description || "",
+            createdAt: data.createdAt || new Date().toISOString(),
+            userName: data.userName || `${currentUser.prenom} ${currentUser.nom}`
+          });
+        }
       });
       // Sort by creation date descending
       items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -112,22 +110,24 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [activeEstId, currentUser]);
 
-  // 3. Clear existing dossiers on user request (or on mount to comply with "supprimer les dossiers enregistrer actuellement")
-  // We will provide a clean programmatic way to delete them and show an immediate success indicator
+  // 3. Clear existing dossiers for current establishment
   const handleDeleteAllDossiers = async () => {
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer tous les dossiers enregistrés actuellement ? Cette action est irréversible.")) {
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer tous les dossiers de cet établissement ? Cette action est irréversible.")) {
       setIsDeletingAll(true);
       try {
         const querySnapshot = await getDocs(collection(db, "dossiers"));
         const deletePromises: Promise<void>[] = [];
         querySnapshot.forEach((docSnap) => {
-          deletePromises.push(deleteDoc(doc(db, "dossiers", docSnap.id)));
+          const data = docSnap.data();
+          if ((data.etablissement || 'EDU-001') === activeEstId) {
+            deletePromises.push(deleteDoc(doc(db, "dossiers", docSnap.id)));
+          }
         });
         await Promise.all(deletePromises);
         setSelectedDossier(null);
-        showNotification("success", "Tous les dossiers précédents ont été supprimés avec succès !");
+        showNotification("success", "Les dossiers de l'établissement ont été supprimés avec succès !");
       } catch (error: any) {
         console.error("Error deleting dossiers:", error);
         showNotification("error", `Échec de la suppression: ${error.message}`);
@@ -239,7 +239,8 @@ export default function App() {
         agentRole: activeAgent,
         description: newDossierDesc,
         createdAt: new Date().toISOString(),
-        userName: `${currentUser.prenom} ${currentUser.nom}`
+        userName: `${currentUser.prenom} ${currentUser.nom}`,
+        etablissement: activeEstId
       });
 
       showNotification("success", `Dossier "${newDossierTitle}" créé et sauvegardé dans Firestore en temps réel !`);
