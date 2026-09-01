@@ -57,12 +57,9 @@ export const runMaintenance = async (userRole: string) => {
       console.error("Error purging connections in maintenance:", connErr);
     }
 
-    // 2. Reset Reports Archive (24h)
+    // 2. Report Archives are preserved per establishment for historical tracking
+    // We update the timestamp without deleting historical reports
     if (nowTime - lastReportsReset >= ONE_DAY) {
-      console.log("Maintenance: Resetting reports archive (24h)...");
-      const reportsSnap = await getDocs(collection(db, 'reports'));
-      const deletePromises = reportsSnap.docs.map(d => deleteDoc(doc(db, 'reports', d.id)));
-      await Promise.all(deletePromises);
       await updateDoc(maintenanceRef, { last_reports_reset: nowTime });
     }
 
