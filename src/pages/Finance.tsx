@@ -357,16 +357,24 @@ const Finance: React.FC<FinanceProps> = ({
     }
   };
 
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
+
   // Real-time Database Subscribers
   useEffect(() => {
     if (!currentUser) return;
 
     // Load payments
     const unsubPayments = onSnapshot(collection(db, 'payments'), (snap) => {
-      const paymentData = snap.docs.map(doc => ({
+      let paymentData = snap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Payment[];
+      
+      // Strict establishment isolation
+      if (!consolidateAll) {
+        paymentData = paymentData.filter(p => (p.etablissement || (p as any).establishmentId || 'EDU-001') === activeEstId);
+      }
+
       paymentData.sort((a, b) => {
         const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
         const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
@@ -382,7 +390,9 @@ const Finance: React.FC<FinanceProps> = ({
     // Load active static & DB dynamic Plan Comptable
     const unsubCompte = onSnapshot(collection(db, 'accounting_plan'), (snap) => {
       if (!snap.empty) {
-        const loaded = snap.docs.map(doc => doc.data() as SYSCOHADAAccount);
+        const loaded = snap.docs
+          .map(doc => doc.data() as SYSCOHADAAccount)
+          .filter(doc => consolidateAll || !doc.etablissement || doc.etablissement === activeEstId || (doc as any).establishmentId === activeEstId);
         // Merge to prevent lost defaults
         const merged = [...DEFAULT_PLAN_COMPTABLE];
         loaded.forEach(item => {
@@ -396,7 +406,7 @@ const Finance: React.FC<FinanceProps> = ({
 
     // Load double entries
     const unsubEntries = onSnapshot(collection(db, 'accounting_entries'), (snap) => {
-      const entryData = snap.docs.map(doc => {
+      let entryData = snap.docs.map(doc => {
         const data = doc.data();
         return {
           id: doc.id,
@@ -404,13 +414,18 @@ const Finance: React.FC<FinanceProps> = ({
           date: data.date?.toDate ? data.date.toDate() : new Date(data.date || Date.now())
         } as DoubleEntry;
       });
+
+      if (!consolidateAll) {
+        entryData = entryData.filter(ent => ((ent as any).etablissement || (ent as any).establishmentId || 'EDU-001') === activeEstId);
+      }
+
       entryData.sort((a,b) => b.date.getTime() - a.date.getTime());
       setAccountingEntries(entryData);
     });
 
     // Load expenses
     const unsubExpenses = onSnapshot(collection(db, 'expenses'), (snap) => {
-      const expData = snap.docs.map(doc => {
+      let expData = snap.docs.map(doc => {
         const data = doc.data();
         return {
           id: doc.id,
@@ -418,6 +433,11 @@ const Finance: React.FC<FinanceProps> = ({
           date: data.date?.toDate ? data.date.toDate() : new Date(data.date || Date.now())
         } as Expense;
       });
+
+      if (!consolidateAll) {
+        expData = expData.filter(e => ((e as any).etablissement || (e as any).establishmentId || 'EDU-001') === activeEstId);
+      }
+
       expData.sort((a,b) => b.date.getTime() - a.date.getTime());
       setExpenses(expData);
     });
@@ -436,22 +456,37 @@ const Finance: React.FC<FinanceProps> = ({
         getDocs(classesQuery)
       ]);
 
-      setStudents(studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setTeachers(teachersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setStaff(staffSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setAllClasses(classesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const allStud = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const allTeach = teachersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const allStf = staffSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const allCls = classesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      if (!consolidateAll) {
+        setStudents(allStud.filter(s => (s.etablissement || 'EDU-001') === activeEstId));
+        setTeachers(allTeach.filter(t => (t.etablissement || 'EDU-001') === activeEstId));
+        setStaff(allStf.filter(st => (st.etablissement || 'EDU-001') === activeEstId));
+        setAllClasses(allCls.filter(c => (c.etablissement || 'EDU-001') === activeEstId));
+      } else {
+        setStudents(allStud);
+        setTeachers(allTeach);
+        setStaff(allStf);
+        setAllClasses(allCls);
+      }
     };
     fetchSchoolUnits();
 
     // Load canteen
     const unsubCanteen = onSnapshot(collection(db, 'canteen_transactions'), (snap) => {
-      const transData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let transData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (!consolidateAll) {
+        transData = transData.filter(t => (t.etablissement || t.establishmentId || 'EDU-001') === activeEstId);
+      }
       setCanteenTransactions(transData);
     });
 
     // Caisses sessions subscribe
     const unsubCaisse = onSnapshot(collection(db, 'caisse_sessions'), (snap) => {
-      const sessions = snap.docs.map(doc => {
+      let sessions = snap.docs.map(doc => {
         const data = doc.data();
         return {
           id: doc.id,
@@ -460,6 +495,9 @@ const Finance: React.FC<FinanceProps> = ({
           closedAt: data.closedAt?.toDate ? data.closedAt.toDate() : data.closedAt ? new Date(data.closedAt) : undefined,
         } as CaisseSession;
       });
+      if (!consolidateAll) {
+        sessions = sessions.filter(s => ((s as any).etablissement || (s as any).establishmentId || 'EDU-001') === activeEstId);
+      }
       sessions.sort((a, b) => b.openedAt.getTime() - a.openedAt.getTime());
       setCaisseSessions(sessions);
       const active = sessions.find(s => s.status === 'open');
@@ -468,7 +506,10 @@ const Finance: React.FC<FinanceProps> = ({
 
     // Load payroll slips in real-time
     const unsubPayroll = onSnapshot(collection(db, 'payroll_slips'), (snap) => {
-      const slips = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let slips = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (!consolidateAll) {
+        slips = slips.filter(s => (s.etablissement || s.establishmentId || 'EDU-001') === activeEstId);
+      }
       setPaySlips(slips);
     }, (err) => {
       console.warn("Error subscribing payroll: ", err);
@@ -476,7 +517,10 @@ const Finance: React.FC<FinanceProps> = ({
 
     // Load fee configurations in real-time
     const unsubFeeConfigs = onSnapshot(collection(db, 'fee_configurations'), (snap) => {
-      const configs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let configs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (!consolidateAll) {
+        configs = configs.filter(c => (c.etablissement || c.establishmentId || 'EDU-001') === activeEstId);
+      }
       setFeeConfigs(configs);
     }, (err) => {
       console.warn("Error subscribing fee configs: ", err);
@@ -492,7 +536,7 @@ const Finance: React.FC<FinanceProps> = ({
       unsubPayroll();
       unsubFeeConfigs();
     };
-  }, [currentUser]);
+  }, [currentUser, activeEstId, consolidateAll]);
 
   // Handle Double Payments Block and validation
   const handleAddPayment = async (e: React.FormEvent) => {
@@ -544,7 +588,9 @@ const Finance: React.FC<FinanceProps> = ({
         notes: newPayment.notes,
         date: serverTimestamp(),
         recordedBy: currentUser.id,
-        recordedByName: `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim()
+        recordedByName: `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim(),
+        etablissement: activeEstId,
+        establishmentId: activeEstId
       };
 
       const docRef = await addDoc(collection(db, 'payments'), paymentPayload);
@@ -570,7 +616,7 @@ const Finance: React.FC<FinanceProps> = ({
       const entryId = `ENT-${docRef.id.slice(0, 6).toUpperCase()}`;
       const hash = generateTransactionHash(entryId, debAccount, credAccount, amountNum, entryDate.toISOString());
 
-      const writePayload: Omit<DoubleEntry, 'id'> = {
+      const writePayload: any = {
         date: serverTimestamp(),
         ref: paymentPayload.reference,
         label: `Encaissement ${paymentPayload.type.toUpperCase()} - Elève : ${studentNameStr}`,
@@ -580,7 +626,9 @@ const Finance: React.FC<FinanceProps> = ({
         recordedBy: currentUser.id,
         recordedByName: `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim(),
         hash: hash,
-        isLocked: false
+        isLocked: false,
+        etablissement: activeEstId,
+        establishmentId: activeEstId
       };
 
       await addDoc(collection(db, 'accounting_entries'), writePayload);
@@ -609,7 +657,7 @@ const Finance: React.FC<FinanceProps> = ({
 
       setSuccessInfo({
         title: "Écriture validée !",
-        message: `Le paiement de ${amountNum.toLocaleString()} FCFA a été enregistré. Compte Débit ${debAccount} et Crédit ${credAccount} mouvementés avec succès (Empreinte numérique : ${hash && hash.includes('-') ? hash.split('-')[1] : (hash || 'N/A')}).`
+        message: `Le paiement de ${amountNum.toLocaleString()} FCFA a été enregistré pour ${currentEstablishment?.nom || activeEstId}. Compte Débit ${debAccount} et Crédit ${credAccount} mouvementés avec succès (Empreinte numérique : ${hash && hash.includes('-') ? hash.split('-')[1] : (hash || 'N/A')}).`
       });
       setShowSuccess(true);
     } catch (err) {
@@ -647,7 +695,9 @@ const Finance: React.FC<FinanceProps> = ({
         date: serverTimestamp(),
         recordedBy: currentUser.id,
         recordedByName: `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim(),
-        status: 'valide'
+        status: 'valide',
+        etablissement: activeEstId,
+        establishmentId: activeEstId
       };
 
       const docRef = await addDoc(collection(db, 'expenses'), expPayload);
@@ -667,7 +717,9 @@ const Finance: React.FC<FinanceProps> = ({
         recordedBy: currentUser.id,
         recordedByName: `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim(),
         hash: hash,
-        isLocked: false
+        isLocked: false,
+        etablissement: activeEstId,
+        establishmentId: activeEstId
       });
 
       await recordAuditLog({
@@ -715,7 +767,9 @@ const Finance: React.FC<FinanceProps> = ({
         code: newAccount.code.trim(),
         name: newAccount.name.trim(),
         category: newAccount.category,
-        type: newAccount.type
+        type: newAccount.type,
+        etablissement: activeEstId,
+        establishmentId: activeEstId
       });
 
       setShowAddAccountModal(false);
@@ -742,7 +796,9 @@ const Finance: React.FC<FinanceProps> = ({
         openedAt: serverTimestamp(),
         openedBy: currentUser.id,
         openedByName: `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim(),
-        initialBalance: balance
+        initialBalance: balance,
+        etablissement: activeEstId,
+        establishmentId: activeEstId
       });
 
       setShowCaisseModal(false);
@@ -2024,13 +2080,97 @@ En tant qu'intelligence artificielle financière d'Edu-Nify, veuillez générer 
       {/* 6. BALANCE & RESULTS SHEET */}
       {activeTab === 'balance_sheet' && (
         <div className="space-y-6">
+          {/* Establishment Scope & Header */}
+          <div className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-150 dark:border-gray-700 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+                <Building2 size={24} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-black text-gray-900 dark:text-white">
+                    Balance & Compte de Résultat (SYSCOHADA)
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    {consolidateAll ? "Consolidation Groupe (Tous)" : (currentEstablishment?.nom || activeEstId)}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {consolidateAll 
+                    ? "Vue consolidée multi-établissements (Super Administrateur)" 
+                    : `Données financières et écritures comptables exclusives à l'établissement ${currentEstablishment?.nom || activeEstId} (Code: ${activeEstId})`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setConsolidateAll(!consolidateAll)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+                    consolidateAll 
+                      ? 'bg-indigo-600 text-white border-indigo-600' 
+                      : 'bg-slate-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600'
+                  }`}
+                  title="Basculer entre la vue isolée de cet établissement et la vue consolidée de tous les établissements"
+                >
+                  {consolidateAll ? "✓ Vue Groupe Consolidée" : "Vue Établissement Seul"}
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  const headers = ["Code Compte", "Intitulé SYSCOHADA", "Débit (FCFA)", "Crédit (FCFA)", "Solde (FCFA)", "Établissement"];
+                  const rows = generalLedgerSummary.details.map(d => [
+                    `"${d.code}"`,
+                    `"${d.name}"`,
+                    d.debit,
+                    d.credit,
+                    d.balance,
+                    `"${currentEstablishment?.nom || activeEstId}"`
+                  ]);
+                  const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
+                  const encodedUri = encodeURI(csvContent);
+                  const link = document.createElement("a");
+                  link.setAttribute("href", encodedUri);
+                  link.setAttribute("download", `Balance_Comptable_${activeEstId}_${new Date().toISOString().slice(0, 10)}.csv`);
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }}
+                className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-200 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                title="Exporter la balance en CSV"
+              >
+                <Download size={14} />
+                <span>Export CSV</span>
+              </button>
+
+              <button
+                onClick={() => window.print()}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Imprimer la balance générale"
+              >
+                <Printer size={14} />
+                <span>Imprimer</span>
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-150 shadow-sm">
-              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4">Balance Générale des Comptes Scolaires</h3>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-150 dark:border-gray-700 shadow-sm">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">
+                  Balance Générale des Comptes Scolaires
+                </h3>
+                <span className="text-[10px] font-bold bg-slate-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-600 dark:text-gray-300">
+                  {generalLedgerSummary.details.length} comptes mouvementés
+                </span>
+              </div>
+              
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs font-mono">
                   <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-900/60 font-black text-gray-400 border-b border-gray-150">
+                    <tr className="bg-slate-50 dark:bg-slate-900/60 font-black text-gray-400 border-b border-gray-150 dark:border-gray-700">
                       <th className="px-4 py-2">Code</th>
                       <th className="px-4 py-2">Intitulé de compte</th>
                       <th className="px-4 py-2">Débit</th>
@@ -2038,21 +2178,29 @@ En tant qu'intelligence artificielle financière d'Edu-Nify, veuillez générer 
                       <th className="px-4 py-2 text-right">Solde</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-150 text-[11px]">
-                    {generalLedgerSummary.details.map(row => (
-                      <tr key={row.code} className="hover:bg-gray-50">
-                        <td className="px-4 py-2.5 font-bold text-indigo-650">{row.code}</td>
-                        <td className="px-4 py-2.5 text-gray-800 dark:text-white truncate max-w-[150px]" title={row.name}>{row.name}</td>
-                        <td className="px-4 py-2.5 text-emerald-600">{row.debit.toLocaleString()}</td>
-                        <td className="px-4 py-2.5 text-rose-500">{row.credit.toLocaleString()}</td>
-                        <td className="px-4 py-2.5 font-bold text-right text-gray-900 dark:text-white">{row.balance.toLocaleString()}</td>
+                  <tbody className="divide-y divide-gray-150 dark:divide-gray-700 text-[11px]">
+                    {generalLedgerSummary.details.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-gray-400 font-sans">
+                          Aucun mouvement comptable enregistré pour {currentEstablishment?.nom || activeEstId}.
+                        </td>
                       </tr>
-                    ))}
-                    <tr className="bg-slate-50 font-black border-t-2 border-slate-200">
+                    ) : (
+                      generalLedgerSummary.details.map(row => (
+                        <tr key={row.code} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                          <td className="px-4 py-2.5 font-bold text-indigo-650 dark:text-indigo-400">{row.code}</td>
+                          <td className="px-4 py-2.5 text-gray-800 dark:text-white truncate max-w-[150px]" title={row.name}>{row.name}</td>
+                          <td className="px-4 py-2.5 text-emerald-600 dark:text-emerald-400">{row.debit.toLocaleString()}</td>
+                          <td className="px-4 py-2.5 text-rose-500 dark:text-rose-400">{row.credit.toLocaleString()}</td>
+                          <td className="px-4 py-2.5 font-bold text-right text-gray-900 dark:text-white">{row.balance.toLocaleString()}</td>
+                        </tr>
+                      ))
+                    )}
+                    <tr className="bg-slate-50 dark:bg-slate-900/80 font-black border-t-2 border-slate-200 dark:border-slate-700">
                       <td colSpan={2} className="px-4 py-3">TOTAUX DE CONCORDANCE</td>
-                      <td className="px-4 py-3 text-emerald-600 text-sm">{generalLedgerSummary.totalDebit.toLocaleString()} FCFA</td>
-                      <td className="px-4 py-3 text-rose-500 text-sm">{generalLedgerSummary.totalCredit.toLocaleString()} FCFA</td>
-                      <td className="px-4 py-3 text-right text-indigo-650">Equilibré</td>
+                      <td className="px-4 py-3 text-emerald-600 dark:text-emerald-400 text-sm">{generalLedgerSummary.totalDebit.toLocaleString()} FCFA</td>
+                      <td className="px-4 py-3 text-rose-500 dark:text-rose-400 text-sm">{generalLedgerSummary.totalCredit.toLocaleString()} FCFA</td>
+                      <td className="px-4 py-3 text-right text-indigo-650 dark:text-indigo-400">Équilibré</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2061,32 +2209,32 @@ En tant qu'intelligence artificielle financière d'Edu-Nify, veuillez générer 
 
             <div className="space-y-6">
               {/* OHADA Income statement simulation based on raw database */}
-              <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-155 shadow-sm space-y-4">
+              <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-155 dark:border-gray-700 shadow-sm space-y-4">
                 <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Compte de Résultat Simplifié (SYSCOHADA)</h3>
                 
                 <div className="space-y-3 text-xs">
-                  <div className="flex justify-between items-center border-b pb-1">
-                    <span className="text-gray-500">PRODUITS (Classe 7)</span>
-                    <span className="font-mono font-bold text-emerald-600">+{stats.income.toLocaleString()} FCFA</span>
+                  <div className="flex justify-between items-center border-b dark:border-gray-700 pb-1">
+                    <span className="text-gray-500 dark:text-gray-400 font-bold">PRODUITS SCOLAIRES (Classe 7)</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">+{stats.income.toLocaleString()} FCFA</span>
                   </div>
                   <div className="pl-4 text-[11px] text-gray-400 space-y-1">
                     <p className="flex justify-between">
-                      <span>• Scolarité (701000) :</span>
-                      <span>{payments.filter(p => p.type === 'tuition').reduce((acc, c) => acc + c.amount, 0).toLocaleString()} FCFA</span>
+                      <span>• Scolarité & Écolages (701000) :</span>
+                      <span className="font-mono text-gray-800 dark:text-gray-200">{payments.filter(p => p.type === 'tuition').reduce((acc, c) => acc + c.amount, 0).toLocaleString()} FCFA</span>
                     </p>
                     <p className="flex justify-between">
                       <span>• Inscription & Activités (701200 / 708200) :</span>
-                      <span>{payments.filter(p => !['tuition', 'canteen'].includes(p.type)).reduce((acc, c) => acc + c.amount, 0).toLocaleString()} FCFA</span>
+                      <span className="font-mono text-gray-800 dark:text-gray-200">{payments.filter(p => !['tuition', 'canteen'].includes(p.type)).reduce((acc, c) => acc + c.amount, 0).toLocaleString()} FCFA</span>
                     </p>
                     <p className="flex justify-between">
-                      <span>• Prestations Repas (706000) :</span>
-                      <span>{canteenTransactions.filter(t => t.type === 'topup').reduce((acc, curr) => acc + curr.amount, 0).toLocaleString()} FCFA</span>
+                      <span>• Prestations Repas & Cantine (706000) :</span>
+                      <span className="font-mono text-gray-800 dark:text-gray-200">{canteenTransactions.filter(t => t.type === 'topup').reduce((acc, curr) => acc + curr.amount, 0).toLocaleString()} FCFA</span>
                     </p>
                   </div>
 
-                  <div className="flex justify-between items-center border-b pb-1 pt-2">
-                    <span className="text-gray-500">CHARGES (Classe 6)</span>
-                    <span className="font-mono font-bold text-rose-500">-{stats.charges.toLocaleString()} FCFA</span>
+                  <div className="flex justify-between items-center border-b dark:border-gray-700 pb-1 pt-2">
+                    <span className="text-gray-500 dark:text-gray-400 font-bold">CHARGES D'EXPLOITATION (Classe 6)</span>
+                    <span className="font-mono font-bold text-rose-500 dark:text-rose-400">-{stats.charges.toLocaleString()} FCFA</span>
                   </div>
                   <div className="pl-4 text-[11px] text-gray-400 space-y-1">
                     {planComptable.filter(p => p.category === 'Charge').map(ch => {
@@ -2094,23 +2242,23 @@ En tant qu'intelligence artificielle financière d'Edu-Nify, veuillez générer 
                       return (
                         <p key={ch.code} className="flex justify-between">
                           <span>• {ch.name} ({ch.code}) :</span>
-                          <span>{amount.toLocaleString()} FCFA</span>
+                          <span className="font-mono text-gray-800 dark:text-gray-200">{amount.toLocaleString()} FCFA</span>
                         </p>
                       );
                     })}
                   </div>
 
-                  <div className="pt-4 border-t-2 border-dashed flex justify-between items-center bg-gray-50 dark:bg-gray-900/60 p-3 rounded-2xl">
-                    <span className="font-black text-gray-900 dark:text-white uppercase">EXCÉDENT COMPTABLE NET</span>
-                    <span className={`font-mono text-sm font-black ${stats.result >= 0 ? 'text-indigo-650' : 'text-red-650'}`}>
+                  <div className="pt-4 border-t-2 border-dashed border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/60 p-3 rounded-2xl">
+                    <span className="font-black text-gray-900 dark:text-white uppercase">RÉSULTAT NET COMPTABLE</span>
+                    <span className={`font-mono text-sm font-black ${stats.result >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                       {stats.result >= 0 ? '+' : ''}{stats.result.toLocaleString()} FCFA
                     </span>
                   </div>
                 </div>
 
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 text-[11px] text-amber-700 rounded-2xl border border-amber-100 dark:border-amber-900 font-bold space-y-1">
-                  <p className="uppercase tracking-wide">Précision d'évaluation Sage :</p>
-                  <p>Aucun amortissement linéaire ou de charge d'intérêts financières n'a été rattaché à cette période académique.</p>
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 text-[11px] text-amber-700 dark:text-amber-300 rounded-2xl border border-amber-100 dark:border-amber-900 font-medium space-y-1">
+                  <p className="uppercase tracking-wide font-bold">Précision d'évaluation SYSCOHADA :</p>
+                  <p>Données calculées en temps réel d'après les écritures validées pour <strong>{currentEstablishment?.nom || activeEstId}</strong>.</p>
                 </div>
               </div>
             </div>
