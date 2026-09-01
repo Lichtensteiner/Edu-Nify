@@ -1,178 +1,370 @@
-import React, { useState, useEffect } from 'react';
-import { WifiOff, Wifi, RefreshCw, AlertTriangle, ShieldAlert } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
+import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
+import { NotificationProvider, useNotification } from "./contexts/NotificationContext";
+import { EstablishmentProvider } from "./contexts/EstablishmentContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
-export default function InternetConnectionGuard() {
-  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const [isChecking, setIsChecking] = useState(false);
-  const [checkError, setCheckError] = useState<string | null>(null);
-  const [showRestoredBanner, setShowRestoredBanner] = useState(false);
+// Components
+import Sidebar from "./components/Sidebar";
+import Header from "./components/Header";
+import Footer from "./components/Footer";
+import MandatoryPasswordChange from "./components/MandatoryPasswordChange";
+import PWAPrompt from "./components/PWAPrompt";
+import ReloadPrompt from "./components/ReloadPrompt";
+import InternetConnectionGuard from "./components/InternetConnectionGuard";
 
-  // Test actual connectivity with a lightweight fetch probe
-  const verifyRealConnection = async (): Promise<boolean> => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      return false;
-    }
-    try {
-      // Test with cache-busting HEAD request to a local static asset
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(`/logo.png?_probe=${Date.now()}`, {
-        method: 'HEAD',
-        cache: 'no-store',
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      return res.ok || res.status === 304 || res.status === 200;
-    } catch {
-      // If fetch fails, fall back to navigator.onLine
-      return typeof navigator !== 'undefined' ? navigator.onLine : false;
-    }
-  };
+// Pages
+import AIAssistant from "./pages/AIAssistant";
+import About from "./pages/About";
+import Attendance from "./pages/Attendance";
+import AuditLogs from "./pages/AuditLogs";
+import BiometricRegistration from "./pages/BiometricRegistration";
+import Calendar from "./pages/Calendar";
+import Canteen from "./pages/Canteen";
+import CanteenDashboard from "./pages/CanteenDashboard";
+import Chat from "./pages/Chat";
+import Classes from "./pages/Classes";
+import Classroom from "./pages/Classroom";
+import Clubs from "./pages/Clubs";
+import CoursesSubjects from "./pages/CoursesSubjects";
+import Dashboard from "./pages/Dashboard";
+import DigitalBinder from "./pages/DigitalBinder";
+import Directory from "./pages/Directory";
+import Discipline from "./pages/Discipline";
+import DocumentGenerator from "./pages/DocumentGenerator";
+import Establishments from "./pages/Establishments";
+import Finance from "./pages/Finance";
+import Grades from "./pages/Grades";
+import Homework from "./pages/Homework";
+import Houses from "./pages/Houses";
+import IntegrationCode from "./pages/IntegrationCode";
+import KioskMode from "./pages/KioskMode";
+import Leaderboard from "./pages/Leaderboard";
+import Library from "./pages/Library";
+import Login from "./pages/Login";
+import LudoAIPlus from "./pages/LudoAIPlus";
+import Messaging from "./pages/Messaging";
+import MobileApp from "./pages/MobileApp";
+import NewsFeed from "./pages/NewsFeed";
+import ParentDashboard from "./pages/ParentDashboard";
+import Profile from "./pages/Profile";
+import RecentConnections from "./pages/RecentConnections";
+import Reports from "./pages/Reports";
+import ResponsibilityZones from "./pages/ResponsibilityZones";
+import Scanner from "./pages/Scanner";
+import Settings from "./pages/Settings";
+import Staff from "./pages/Staff";
+import StrategicOptimizations from "./pages/StrategicOptimizations";
+import StudentCard from "./pages/StudentCard";
+import StudentDashboard from "./pages/StudentDashboard";
+import Surveys from "./pages/Surveys";
+import TeacherPlanning from "./pages/TeacherPlanning";
+import TermsAndConditions from "./pages/TermsAndConditions";
+import Users from "./pages/Users";
+import Parents from "./pages/Parents";
+import AccessControl from "./pages/AccessControl";
+import DossiersAgents from "./pages/DossiersAgents";
+import TechSheet from "./pages/TechSheet";
+import { Trash } from "./pages/Trash";
 
-  const handleManualCheck = async () => {
-    setIsChecking(true);
-    setCheckError(null);
-    try {
-      const online = await verifyRealConnection();
-      setIsOnline(online);
-      if (!online) {
-        setCheckError("Connexion toujours indisponible. Veuillez vérifier votre réseau Wi-Fi, câble Ethernet ou données mobiles.");
-      } else {
-        setShowRestoredBanner(true);
-        setTimeout(() => setShowRestoredBanner(false), 4500);
-      }
-    } catch {
-      setIsOnline(false);
-      setCheckError("Impossible d'établir une connexion Internet.");
-    } finally {
-      setIsChecking(false);
-    }
-  };
+function AppContent() {
+  const { currentUser, loading } = useAuth();
+  const { theme } = useTheme();
+  const { t } = useLanguage();
+  const { notifySuccess, notifyError } = useNotification();
+  
+  // Navigation states
+  const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [chatTargetId, setChatTargetId] = useState<string | null>(null);
+  const [prepId, setPrepId] = useState<any>(null);
+  const [classroomName, setClassroomName] = useState<any>(null);
 
+  // Set default tab on user login based on role
   useEffect(() => {
-    const handleOnlineEvent = async () => {
-      const online = await verifyRealConnection();
-      setIsOnline(online);
-      if (online) {
-        setShowRestoredBanner(true);
-        setTimeout(() => setShowRestoredBanner(false), 4500);
+    if (currentUser) {
+      if (currentUser.role === "élève") {
+        setActiveTab("student_dashboard");
+      } else if (currentUser.role === "parent") {
+        setActiveTab("dashboard");
+      } else if (currentUser.role === "cuisinier") {
+        setActiveTab("dashboard");
+      } else {
+        setActiveTab("dashboard");
+      }
+    }
+  }, [currentUser]);
+
+  // Handle browser and mobile back button navigation via PopStateEvent
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state && event.state.tab) {
+        setActiveTab(event.state.tab);
+        setPrepId(event.state.prepId ?? null);
+        setClassroomName(event.state.classroomName ?? null);
+        setChatTargetId(event.state.chatTargetId ?? null);
+      } else {
+        const defaultTab = currentUser.role === "élève" ? "student_dashboard" : "dashboard";
+        setActiveTab(defaultTab);
+        setPrepId(null);
+        setClassroomName(null);
+        setChatTargetId(null);
       }
     };
 
-    const handleOfflineEvent = () => {
-      setIsOnline(false);
-      setCheckError(null);
-    };
+    window.addEventListener("popstate", handlePopState);
 
-    window.addEventListener('online', handleOnlineEvent);
-    window.addEventListener('offline', handleOfflineEvent);
-
-    // Initial sanity check on mount
-    if (!navigator.onLine) {
-      setIsOnline(false);
+    // Initialize/Replace the initial entry in history if it doesn't exist yet
+    const defaultTab = currentUser.role === "élève" ? "student_dashboard" : "dashboard";
+    if (!window.history.state) {
+      window.history.replaceState({ tab: defaultTab, prepId: null, classroomName: null, chatTargetId: null }, "");
     }
 
     return () => {
-      window.removeEventListener('online', handleOnlineEvent);
-      window.removeEventListener('offline', handleOfflineEvent);
+      window.removeEventListener("popstate", handlePopState);
     };
-  }, []);
+  }, [currentUser]);
 
+  // Synchronize state changes into browser history so back buttons work flawlessly
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const currentState = window.history.state;
+    
+    // Ignore pushing navigation state on top of custom overlay modals like notification details
+    if (currentState?.modal) return;
+
+    const shouldPush = !currentState || 
+                       currentState.tab !== activeTab || 
+                       currentState.prepId !== prepId ||
+                       currentState.classroomName !== classroomName ||
+                       currentState.chatTargetId !== chatTargetId;
+
+    if (shouldPush) {
+      window.history.pushState(
+        { tab: activeTab, prepId, classroomName, chatTargetId },
+        ""
+      );
+    }
+  }, [activeTab, prepId, classroomName, chatTargetId, currentUser]);
+
+  // Navigate function passed to components
+  const handleNavigate = (tab: string, params?: any) => {
+    setActiveTab(tab);
+    if (tab === "courses_subjects" && params?.prepId) {
+      setPrepId(params.prepId);
+    }
+    if (tab === "classroom" && params?.className) {
+      setClassroomName(params.className);
+    }
+    if (tab === "messaging" && params?.chatTargetId) {
+      setChatTargetId(params.chatTargetId);
+    }
+  };
+
+  // Render loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+        <div className="relative flex items-center justify-center">
+          <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+          <div className="absolute text-indigo-600 font-black text-xl">EN</div>
+        </div>
+        <p className="mt-4 text-sm font-bold text-gray-700 dark:text-gray-300 animate-pulse">
+          Chargement de l'écosystème Edu-Nify...
+        </p>
+      </div>
+    );
+  }
+
+  // Render login page if not logged in
+  if (!currentUser) {
+    return <Login />;
+  }
+
+  // Enforce password change if flagged
+  if (currentUser.mustChangePassword) {
+    return <MandatoryPasswordChange />;
+  }
+
+  // Render selected tab / page
+  const renderPage = () => {
+    // If pupil tries to view something restricted, or parents have specific landing
+    const role = currentUser.role;
+
+    // Special redirection: if a parent is on an integrated tab, we map them to ParentDashboard with the correct initial sub-tab
+    if (role === "parent") {
+      const parentTabs = ["dashboard", "grades", "homework", "planning", "finance"];
+      if (parentTabs.includes(activeTab)) {
+        let initialTab: 'overview' | 'grades' | 'attendance' | 'homework' | 'courses' | 'timetable' | 'finance' = 'overview';
+        if (activeTab === 'grades') initialTab = 'grades';
+        else if (activeTab === 'homework') initialTab = 'homework';
+        else if (activeTab === 'planning') initialTab = 'timetable';
+        else if (activeTab === 'finance') initialTab = 'finance';
+        return <ParentDashboard onNavigate={handleNavigate} initialTab={initialTab} />;
+      }
+    }
+
+    // Direct mapping
+    switch (activeTab) {
+      case "dashboard":
+        return <Dashboard onNavigate={handleNavigate} />;
+      case "student_dashboard":
+        return <StudentDashboard onNavigate={handleNavigate} />;
+      case "newsfeed":
+        return <NewsFeed />;
+      case "directory":
+        return <Directory onNavigate={handleNavigate} />;
+      case "messaging":
+        return (
+          <Messaging
+            initialChatTargetId={chatTargetId || undefined}
+            onClearTarget={() => setChatTargetId(null)}
+          />
+        );
+      case "profile":
+        return <Profile />;
+      case "about":
+        return <About />;
+      case "terms":
+        return <TermsAndConditions />;
+      case "digital_binder":
+        return <DigitalBinder onNavigate={handleNavigate} />;
+      case "classroom":
+        return <Classroom initialClassName={classroomName} />;
+      case "homework":
+        return <Homework />;
+      case "grades":
+        return <Grades />;
+      case "ludo_ai_plus":
+        return <LudoAIPlus />;
+      case "courses_subjects":
+        return <CoursesSubjects initialPrepId={prepId} />;
+      case "ai_assistant":
+        return <AIAssistant onNavigate={handleNavigate} />;
+      case "classes":
+        return <Classes />;
+      case "planning":
+        return <TeacherPlanning />;
+      case "calendar":
+        return <Calendar />;
+      case "attendance":
+        return <Attendance />;
+      case "reports":
+        return <Reports />;
+      case "student_card":
+        return <StudentCard />;
+      case "houses":
+        return <Houses />;
+      case "clubs":
+        return <Clubs />;
+      case "leaderboard":
+        return <Leaderboard />;
+      case "library":
+        return <Library />;
+      case "canteen":
+        return <Canteen />;
+      case "surveys":
+        return <Surveys />;
+      case "establishments":
+        return <Establishments />;
+      case "users":
+        return <Users />;
+      case "parents":
+        return <Parents />;
+      case "access_control":
+        return <AccessControl />;
+      case "staff":
+        return <Staff />;
+      case "responsibility_zones":
+        return <ResponsibilityZones />;
+      case "document_generator":
+        return <DocumentGenerator />;
+      case "finance":
+        return <Finance />;
+      case "discipline":
+        return <Discipline />;
+      case "strategic_optimizations":
+        return <StrategicOptimizations />;
+      case "recent_connections":
+        return <RecentConnections />;
+      case "audit_logs":
+        return <AuditLogs />;
+      case "scanner":
+        return <Scanner />;
+      case "kiosk":
+        return <KioskMode onExit={() => setActiveTab(currentUser.role === "élève" ? "student_dashboard" : "dashboard")} />;
+      case "mobile_app":
+        return <MobileApp />;
+      case "integration":
+        return <IntegrationCode />;
+      case "settings":
+        return <Settings />;
+      case "dossiers_agents":
+        return <DossiersAgents />;
+      case "tech_sheet":
+        return <TechSheet />;
+      case "trash":
+        return <Trash currentUser={currentUser} notifySuccess={notifySuccess} notifyError={notifyError} />;
+      default:
+        return (
+          <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Page Non Trouvée</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">La page "{activeTab}" n'est pas encore disponible.</p>
+          </div>
+        );
+    }
+  };
+
+  // Full dashboard layout
   return (
-    <>
-      {/* Restored Connection Toast */}
-      {showRestoredBanner && isOnline && (
-        <div 
-          id="network-restored-toast"
-          className="fixed top-5 right-5 z-[999999] flex items-center gap-3 px-5 py-3.5 bg-emerald-600 text-white rounded-2xl shadow-2xl border border-emerald-400/40 animate-bounce transition-all duration-300 font-sans"
-        >
-          <div className="p-1.5 bg-white/20 rounded-xl">
-            <Wifi size={18} className="text-white" />
-          </div>
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider">Connexion Rétablie</p>
-            <p className="text-[11px] text-emerald-100 font-medium">L'application Edu-Nify est connectée et synchronisée en temps réel.</p>
-          </div>
-        </div>
-      )}
+    <div className={`min-h-screen flex bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-200`}>
+      {/* Sidebar navigation */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        isMobileOpen={isMobileOpen}
+        setIsMobileOpen={setIsMobileOpen}
+      />
 
-      {/* Offline Alert Modal / Blocker */}
-      {!isOnline && (
-        <div 
-          id="offline-guard-overlay"
-          className="fixed inset-0 z-[999998] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 select-none font-sans"
-        >
-          <div 
-            id="offline-guard-card"
-            className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-3xl p-6 sm:p-8 shadow-2xl border-2 border-rose-500/40 dark:border-rose-500/30 text-center relative overflow-hidden"
-          >
-            {/* Top decorative glow */}
-            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 bg-rose-500/20 rounded-full blur-3xl pointer-events-none" />
+      {/* Main Workspace */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        <Header
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          onMenuClick={() => setIsMobileOpen(true)}
+        />
 
-            {/* Pulsing Icon */}
-            <div className="relative inline-flex items-center justify-center mb-6">
-              <div className="w-20 h-20 bg-rose-100 dark:bg-rose-950/60 rounded-3xl flex items-center justify-center border-2 border-rose-200 dark:border-rose-800/80 shadow-lg shadow-rose-500/10">
-                <WifiOff className="w-10 h-10 text-rose-600 dark:text-rose-400 animate-pulse" />
-              </div>
-              <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-500"></span>
-              </span>
-            </div>
+        {/* Content Section */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl w-full mx-auto print:p-0">
+          {renderPage()}
+          <Footer onNavigate={handleNavigate} />
+        </main>
+      </div>
 
-            {/* Badge */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 rounded-full text-[11px] font-black tracking-wider uppercase border border-rose-200 dark:border-rose-900/60 mb-3">
-              <ShieldAlert size={13} />
-              Accès Bloqué • Mode En Ligne Requis
-            </div>
+      {/* PWAPrompt & ReloadPrompt */}
+      <PWAPrompt />
+      <ReloadPrompt />
+    </div>
+  );
+}
 
-            {/* Title */}
-            <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight mb-2">
-              Connexion Internet Requise
-            </h2>
-
-            {/* Description */}
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-medium leading-relaxed max-w-md mx-auto mb-6">
-              L'application <strong className="text-indigo-600 dark:text-indigo-400">Edu-Nify</strong> fonctionne exclusivement avec une connexion Internet active pour assurer l'intégrité, la sécurité et la synchronisation en temps réel de vos données d'établissement.
-            </p>
-
-            {/* Diagnosis / Info Box */}
-            <div className="bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-750 rounded-2xl p-4 text-left space-y-2 mb-6">
-              <div className="flex items-center justify-between text-xs font-bold">
-                <span className="text-gray-500 dark:text-gray-400">Statut Réseau :</span>
-                <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1.5 font-black">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                  Hors-ligne (Aucun signal)
-                </span>
-              </div>
-              <div className="text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2 flex items-start gap-2">
-                <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                <span>Veuillez vérifier votre signal Wi-Fi, votre routeur ou vos données mobiles (4G/5G) pour reprendre votre session.</span>
-              </div>
-            </div>
-
-            {/* Error notice if manual check fails */}
-            {checkError && (
-              <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-600 dark:text-rose-300 font-bold animate-shake">
-                {checkError}
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 justify-center">
-              <button
-                id="btn-retry-connection"
-                onClick={handleManualCheck}
-                disabled={isChecking}
-                className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 cursor-pointer disabled:opacity-60"
-              >
-                <RefreshCw className={isChecking ? 'animate-spin' : ''} size={15} />
-                {isChecking ? 'Vérification du réseau...' : 'Vérifier & Réessayer'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+export default function App() {
+  return (
+    <ThemeProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <EstablishmentProvider>
+              <InternetConnectionGuard />
+              <AppContent />
+            </EstablishmentProvider>
+          </NotificationProvider>
+        </AuthProvider>
+      </LanguageProvider>
+    </ThemeProvider>
   );
 }
