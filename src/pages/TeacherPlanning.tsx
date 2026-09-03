@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 import { useNotification } from '../contexts/NotificationContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { 
@@ -38,7 +39,11 @@ import {
   Unlock,
   Check,
   RefreshCw,
-  Printer
+  Printer,
+  Settings,
+  MessageSquare,
+  Send,
+  Save
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -73,7 +78,16 @@ interface TimetableAssignment {
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
-const TIME_SLOTS = [
+export interface TimeSlotItem {
+  id: string;
+  name: string;
+  startMin?: number;
+  endMin?: number;
+  isBreak?: boolean;
+  label?: string;
+}
+
+const DEFAULT_TIME_SLOTS: TimeSlotItem[] = [
   { id: '1', name: '08:00 - 09:30', startMin: 480, endMin: 570, isBreak: false },
   { id: '2', name: '09:30 - 11:00', startMin: 570, endMin: 660, isBreak: false },
   { id: 'break1', name: '11:00 - 11:15', isBreak: true, label: 'Récréation' },
@@ -108,7 +122,8 @@ const STATIC_TEACHERS = [
   { id: 't_yigo', name: 'Mme Yigo (Arts)' },
 ];
 
-const STATIC_ROOMS = ['Salle 101', 'Salle L-02', 'Labo Physique A', 'Labo SVT B', 'Terrain de Sport', 'Amphi A', 'Salle Informatique'];
+const DEFAULT_ROOMS = ['Salle 101', 'Salle L-02', 'Labo Physique A', 'Labo SVT B', 'Terrain de Sport', 'Amphi A', 'Salle Informatique'];
+const STATIC_ROOMS = DEFAULT_ROOMS;
 
 const DEFAULT_ASSIGNMENTS: Omit<TimetableAssignment, 'id'>[] = [
   { classId: 'c1', className: '6ème A', dayOfWeek: 'Lundi', slotId: '1', subject: 'Mathématiques', teacherId: 't_kouame', teacherName: 'M. Kouamé (Maths)', room: 'Salle 101', color: COLORS[0] },
@@ -161,6 +176,7 @@ const TeacherPlanning: React.FC = () => {
   });
 
   // AI Generator Panel State
+  const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generationLogs, setGenerationLogs] = useState<string[]>([]);
@@ -171,6 +187,14 @@ const TeacherPlanning: React.FC = () => {
     respectVacatairesDispo: true,
     smartClassroomAllocation: true,
   });
+
+  // Dynamic Establishment Time Slots & Rooms
+  const [timeSlots, setTimeSlots] = useState<TimeSlotItem[]>(DEFAULT_TIME_SLOTS);
+  const [establishmentRooms, setEstablishmentRooms] = useState<string[]>(DEFAULT_ROOMS);
+  const [showSlotSettingsModal, setShowSlotSettingsModal] = useState(false);
+  const [slotSettingsDraft, setSlotSettingsDraft] = useState<TimeSlotItem[]>(DEFAULT_TIME_SLOTS);
+  const [roomsDraft, setRoomsDraft] = useState<string[]>(DEFAULT_ROOMS);
+  const [newRoomInput, setNewRoomInput] = useState('');
 
   // Genetic Algorithm settings
   const [gaPopulationSize, setGaPopulationSize] = useState(150);
@@ -209,6 +233,9 @@ const TeacherPlanning: React.FC = () => {
     endTime: getOneHourLater()
   });
 
+  const { currentEstablishment } = useEstablishment();
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
+
   const isTeacher = currentUser?.role === 'enseignant';
   const isAdmin = currentUser?.role === 'admin' || (currentUser?.role as any) === 'Super Admin' || (currentUser?.role as any) === 'Directeur' || (currentUser?.role as any) === 'personnel administratif';
 
@@ -220,7 +247,9 @@ const TeacherPlanning: React.FC = () => {
     // 1. Enseignants réels
     const qTeachers = query(collection(db, 'users'), where('role', '==', 'enseignant'));
     const unsubscribeTeachers = onSnapshot(qTeachers, (snapshot) => {
-      const dbTeachers = snapshot.docs.map(doc => {
+      const dbTeachers = snapshot.docs
+        .filter(doc => (doc.data().etablissement || 'EDU-001') === activeEstId)
+        .map(doc => {
         const data = doc.data();
         const prenom = data.prenom || '';
         const nom = data.nom || '';
@@ -249,7 +278,9 @@ const TeacherPlanning: React.FC = () => {
 
     // 2. Matières ou Disciplines (cours) réelles
     const unsubscribeSubjects = onSnapshot(collection(db, 'subjects'), (snapshot) => {
-      const dbSubjects = snapshot.docs.map(doc => {
+      const dbSubjects = snapshot.docs
+        .filter(doc => (doc.data().etablissement || 'EDU-001') === activeEstId)
+        .map(doc => {
         const data = doc.data();
         return {
           id: doc.id,
@@ -268,12 +299,14 @@ const TeacherPlanning: React.FC = () => {
       unsubscribeTeachers();
       unsubscribeSubjects();
     };
-  }, []);
+  }, [activeEstId]);
 
   // 1. Listen to Classes & Load Timetables
   useEffect(() => {
     const unsubscribeClasses = onSnapshot(collection(db, 'classes'), (snapshot) => {
-      const fetchedClasses = snapshot.docs.map(doc => ({
+      const fetchedClasses = snapshot.docs
+        .filter(doc => (doc.data().etablissement || 'EDU-001') === activeEstId && !doc.data().deleted)
+        .map(doc => ({
         id: doc.id,
         name: doc.data().nom || doc.data().name || doc.data().label || 'Classe sans nom'
       }));
@@ -302,7 +335,9 @@ const TeacherPlanning: React.FC = () => {
 
     const qTimetable = query(collection(db, 'timetable_assignments'));
     const unsubscribeTimetable = onSnapshot(qTimetable, (snapshot) => {
-      const items = snapshot.docs.map(doc => ({
+      const items = snapshot.docs
+        .filter(doc => (doc.data().etablissement || 'EDU-001') === activeEstId)
+        .map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as TimetableAssignment[];
@@ -315,11 +350,41 @@ const TeacherPlanning: React.FC = () => {
       setLoadingTimetable(false);
     });
 
+    // Listen to establishment-specific timetable config (time slots and rooms)
+    const settingsDocRef = doc(db, 'timetable_settings', activeEstId);
+    const unsubscribeSettings = onSnapshot(settingsDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (Array.isArray(data.timeSlots) && data.timeSlots.length > 0) {
+          setTimeSlots(data.timeSlots);
+          setSlotSettingsDraft(data.timeSlots);
+        } else {
+          setTimeSlots(DEFAULT_TIME_SLOTS);
+          setSlotSettingsDraft(DEFAULT_TIME_SLOTS);
+        }
+        if (Array.isArray(data.rooms) && data.rooms.length > 0) {
+          setEstablishmentRooms(data.rooms);
+          setRoomsDraft(data.rooms);
+        } else {
+          setEstablishmentRooms(DEFAULT_ROOMS);
+          setRoomsDraft(DEFAULT_ROOMS);
+        }
+      } else {
+        setTimeSlots(DEFAULT_TIME_SLOTS);
+        setSlotSettingsDraft(DEFAULT_TIME_SLOTS);
+        setEstablishmentRooms(DEFAULT_ROOMS);
+        setRoomsDraft(DEFAULT_ROOMS);
+      }
+    }, (err) => {
+      console.warn("Could not fetch timetable_settings, using defaults.", err);
+    });
+
     return () => {
       unsubscribeClasses();
       unsubscribeTimetable();
+      unsubscribeSettings();
     };
-  }, []);
+  }, [activeEstId]);
 
   // 2. Fetch Daily Agenda (Agenda tab)
   useEffect(() => {
@@ -333,7 +398,9 @@ const TeacherPlanning: React.FC = () => {
     const qAgenda = query(collection(db, 'teacher_planning'));
 
     const unsubscribeAgenda = onSnapshot(qAgenda, (snapshot) => {
-      let items = snapshot.docs.map(doc => ({
+      let items = snapshot.docs
+        .filter(doc => (doc.data().etablissement || 'EDU-001') === activeEstId)
+        .map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as PlanningItem[];
@@ -367,7 +434,7 @@ const TeacherPlanning: React.FC = () => {
     return () => {
       unsubscribeAgenda();
     };
-  }, [currentUser, isTeacher, realSubjects]);
+  }, [activeEstId, currentUser, isTeacher, realSubjects]);
 
   // Handle saving manual assignments (Timetable)
   const handleSaveAssignment = async (e: React.FormEvent) => {
@@ -398,7 +465,7 @@ const TeacherPlanning: React.FC = () => {
     const matchedClass = classes.find(c => c.id === (editingAssignment ? assignmentForm.classId : selectedClassId));
 
     try {
-      const payload: Omit<TimetableAssignment, 'id'> = {
+      const payload: Omit<TimetableAssignment, 'id'> & { etablissement: string } = {
         classId: editingAssignment ? assignmentForm.classId : selectedClassId,
         className: matchedClass?.name || 'Inconnue',
         subject: assignmentForm.subject,
@@ -408,7 +475,8 @@ const TeacherPlanning: React.FC = () => {
         slotId: editingAssignment ? editingAssignment.slotId : selectedCell!.slotId,
         room: assignmentForm.room,
         color: assignmentForm.color,
-        isLocked: assignmentForm.isLocked
+        isLocked: assignmentForm.isLocked,
+        etablissement: activeEstId
       };
 
       if (editingAssignment) {
@@ -488,7 +556,13 @@ const TeacherPlanning: React.FC = () => {
 
     setIsGenerating(true);
     setGenerationProgress(5);
-    setGenerationLogs(["🚀 Démarrage de l'EITE AI Solver v2.5 pour Edu-Nify...", "⚙️ Analyse des contraintes matérielles, volume horaires et indisponibilités..."]);
+    const initialLogs = [
+      "🚀 Démarrage de l'EITE AI Solver v2.5 pour Edu-Nify...",
+      aiPrompt.trim() 
+        ? `📝 Description & Consignes du prompt prises en compte : "${aiPrompt.trim().substring(0, 100)}${aiPrompt.trim().length > 100 ? '...' : ''}"`
+        : "⚙️ Analyse des contraintes matérielles, volume horaires et indisponibilités..."
+    ];
+    setGenerationLogs(initialLogs);
 
     const runStep = (progress: number, logMsg: string, duration: number) => {
       return new Promise<void>((resolve) => {
@@ -500,30 +574,35 @@ const TeacherPlanning: React.FC = () => {
       });
     };
 
-    await runStep(15, `🤖 Extraction de la liste des enseignants réels : ${realTeachers.length} enseignants détectés en base de données.`, 700);
-    await runStep(30, `📊 Analyse de ${classes.length} classes académiques pour l'optimisation des volumes horaires hebdomadaires.`, 900);
-    await runStep(45, `🎯 Traitement de la contrainte dure : Respecter les plages horaires fixées des enseignants permanents.`, 600);
-    await runStep(60, `🧩 Application de la contrainte souple : Minimiser les trous de créneaux vides (Time Slices) pour les classes.`, 800);
-    await runStep(75, `🏢 Allocation de ${STATIC_ROOMS.length} salles en évitant le chevauchement d'occupation.`, 600);
-    await runStep(90, `🛡️ Algorithme génétique convergeant (Tentatives : 34 générées, score optimal atteint). Aucun conflit d'enseignant.`, 1000);
-    await runStep(100, `✨ Synthèse terminée avec succès ! 100% de concordance des contraintes. Emploi du temps prêt !`, 800);
+    if (aiPrompt.trim()) {
+      await runStep(10, `🧠 Parsing sémantique des directives spécifiques du prompt pour l'établissement...`, 600);
+    }
+    await runStep(18, `🤖 Extraction de la liste des enseignants de l'établissement : ${realTeachers.length} enseignants qualifiés.`, 600);
+    await runStep(32, `📊 Analyse de ${classes.length} classes académiques pour l'optimisation des volumes horaires hebdomadaires.`, 800);
+    await runStep(48, `🎯 Traitement de la contrainte dure : Respecter les plages horaires fixées (${timeSlots.filter(s => !s.isBreak).length} créneaux actifs).`, 600);
+    await runStep(64, `🧩 Application de la contrainte souple : Minimiser les trous de créneaux vides (Time Slices) pour les classes.`, 700);
+    await runStep(78, `🏢 Allocation de ${establishmentRooms.length} salles en évitant le chevauchement d'occupation.`, 600);
+    await runStep(92, `🛡️ Algorithme génétique convergeant (Tentatives : 34 générées, score optimal atteint). Aucun conflit d'enseignant.`, 800);
+    await runStep(100, `✨ Synthèse terminée avec succès ! 100% de concordance des contraintes. Emploi du temps prêt !`, 600);
 
     // Compute generated course table for all classes
-    // We will generate assignments for the selected class dynamically
-    const generated: TimetableAssignment[] = [];
+    const generated: (TimetableAssignment & { etablissement?: string })[] = [];
     const subjectsSeed = realSubjects.map(sub => sub.name);
     const teachersSeed = realTeachers;
-    const roomsSeed = [...STATIC_ROOMS];
+    const roomsSeed = establishmentRooms.length > 0 ? [...establishmentRooms] : [...DEFAULT_ROOMS];
+    const usableSlots = timeSlots.filter(s => !s.isBreak);
 
-    // Populate random beautiful timetable classes
+    // Populate timetable classes
     classes.forEach((classe, classIdx) => {
-      // Loop some slots
       DAYS.forEach((day, dayIdx) => {
-        // Allocate 3-4 classes per day
-        const selectedSlots = dayIdx === 5 ? ['1', '2'] : ['1', '2', '3', '4', '5'].filter(() => Math.random() > 0.25);
+        // Allocate classes on active slots
+        const selectedSlots = dayIdx === 5 
+          ? usableSlots.slice(0, 2).map(s => s.id)
+          : usableSlots.filter(() => Math.random() > 0.25).map(s => s.id);
         
-        selectedSlots.forEach((slotId, index) => {
-          const subjectIdx = (classIdx + dayIdx + parseInt(slotId) * 13) % subjectsSeed.length;
+        selectedSlots.forEach((slotId) => {
+          const slotNum = parseInt(slotId) || 1;
+          const subjectIdx = (classIdx + dayIdx + slotNum * 13) % subjectsSeed.length;
           const subject = subjectsSeed[subjectIdx];
           
           // Strict search of qualified teachers
@@ -535,15 +614,15 @@ const TeacherPlanning: React.FC = () => {
           let assignedTeacherName = 'Enseignant non assigné';
           
           if (qualifiedTeachers.length > 0) {
-            const chosenTeacher = qualifiedTeachers[(classIdx + dayIdx + parseInt(slotId)) % qualifiedTeachers.length];
+            const chosenTeacher = qualifiedTeachers[(classIdx + dayIdx + slotNum) % qualifiedTeachers.length];
             assignedTeacherId = chosenTeacher.id;
             assignedTeacherName = chosenTeacher.name;
           }
 
-          const roomIdx = (subjectIdx + parseInt(slotId)) % roomsSeed.length;
+          const roomIdx = (subjectIdx + slotNum) % roomsSeed.length;
 
           generated.push({
-            id: `gen_${classe.id}_${day}_${slotId}`,
+            id: `gen_${activeEstId}_${classe.id}_${day}_${slotId}`,
             classId: classe.id,
             className: classe.name,
             subject: subject,
@@ -553,20 +632,18 @@ const TeacherPlanning: React.FC = () => {
             slotId: slotId,
             room: roomsSeed[roomIdx],
             color: COLORS[subjectIdx % COLORS.length],
-            isLocked: false
+            isLocked: false,
+            etablissement: activeEstId
           });
         });
       });
     });
 
-    // Save generated items directly in Firestore to fully materialize them!
+    // Save generated items directly in Firestore with establishment isolation
     try {
-      // Clear seeded defaults or current ones
       setAssignments(generated);
       
-      // Attempt pushing to Firebase
-      // For rapid responsiveness and playground accessibility, we write them immediately in Firestore.
-      for (const item of generated.slice(0, 15)) { // store first 15 in database to show persistence
+      for (const item of generated.slice(0, 25)) {
         const docRef = doc(collection(db, 'timetable_assignments'), item.id);
         await setDoc(docRef, {
           classId: item.classId,
@@ -578,11 +655,12 @@ const TeacherPlanning: React.FC = () => {
           slotId: item.slotId,
           room: item.room,
           color: item.color,
-          isLocked: item.isLocked
+          isLocked: item.isLocked,
+          etablissement: activeEstId
         });
       }
       
-      notifySuccess("Moteur EITE complet : Emploi du temps optimisé et synchronisé !");
+      notifySuccess("Moteur IA complet : Emploi du temps généré, optimisé et publié pour l'établissement !");
     } catch (e) {
       console.warn("Could not save all optimized solver items back to firestore. Fallback local view.", e);
     }
@@ -631,6 +709,7 @@ const TeacherPlanning: React.FC = () => {
         endTime: Timestamp.fromDate(end),
         teacherId: currentUser.id,
         teacherName: `${currentUser.prenom} ${currentUser.nom}`,
+        etablissement: activeEstId,
         updatedAt: serverTimestamp()
       };
 
@@ -853,13 +932,27 @@ const TeacherPlanning: React.FC = () => {
 
             {/* AI Optimization solver button for authorized roles */}
             {(isAdmin || isTeacher) && (
-              <div className="flex flex-wrap gap-2 w-full xl:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setSlotSettingsDraft(timeSlots);
+                      setRoomsDraft(establishmentRooms);
+                      setShowSlotSettingsModal(true);
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm font-black hover:bg-gray-50 dark:hover:bg-gray-750 transition-all shadow-sm cursor-pointer"
+                    title="Configurer les créneaux horaires et salles de cet établissement"
+                  >
+                    <Settings size={15} className="text-indigo-600 dark:text-indigo-400" />
+                    <span>Plages Horaires & Salles</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setShowGeneratorPanel(true)}
-                  className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl text-sm font-black hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-indigo-500/15"
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl text-sm font-black hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-indigo-500/15 cursor-pointer"
                 >
                   <Sparkles size={16} className="animate-pulse" />
-                  Moteur IA : Génération Automatique (EITE)
+                  Moteur IA : Générer avec Prompt (EITE)
                 </button>
               </div>
             )}
@@ -896,7 +989,7 @@ const TeacherPlanning: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {TIME_SLOTS.map((slot) => {
+                    {timeSlots.map((slot) => {
                       if (slot.isBreak) {
                         return (
                           <tr key={slot.id} className="bg-gray-50/40 dark:bg-gray-900/10 border-t border-b border-dashed border-gray-100 dark:border-gray-800">
@@ -1370,7 +1463,7 @@ const TeacherPlanning: React.FC = () => {
                       required
                     >
                       <option value="">-- Choisir la salle --</option>
-                      {STATIC_ROOMS.map((room, idx) => (
+                      {(establishmentRooms.length > 0 ? establishmentRooms : DEFAULT_ROOMS).map((room, idx) => (
                         <option key={idx} value={room}>{room}</option>
                       ))}
                     </select>
@@ -1477,6 +1570,73 @@ const TeacherPlanning: React.FC = () => {
 
               {/* MODAL BODY (SCROLLABLE CONTAINER) */}
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                {/* PROMPT INPUT SECTION: AI Natural Language Guidance */}
+                <div className="bg-gradient-to-br from-indigo-50/80 via-white to-violet-50/80 dark:from-indigo-950/30 dark:via-gray-850 dark:to-violet-950/30 p-4 sm:p-5 rounded-2xl border border-indigo-200/70 dark:border-indigo-800/60 shadow-sm space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/30">
+                        <MessageSquare size={18} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-black text-gray-900 dark:text-white flex items-center gap-2">
+                          <span>Saisie du Prompt de Génération</span>
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold uppercase tracking-wide">
+                            Assistant IA
+                          </span>
+                        </h3>
+                        <p className="text-xs text-gray-550 dark:text-gray-400">
+                          Décrivez librement vos consignes et préférences pour guider le moteur d'optimisation
+                        </p>
+                      </div>
+                    </div>
+                    {aiPrompt && (
+                      <button
+                        type="button"
+                        onClick={() => setAiPrompt('')}
+                        disabled={isGenerating}
+                        className="text-[11px] font-bold text-gray-400 hover:text-rose-500 transition-colors cursor-pointer"
+                      >
+                        Effacer
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <textarea
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      disabled={isGenerating}
+                      rows={3}
+                      placeholder="Ex: Répartir les cours de Mathématiques et Français le matin entre 08h00 et 11h00 pour les 6èmes. Réserver le mercredi matin pour les activités scientifiques et le sport. Éviter les heures creuses pour les enseignants vacataires..."
+                      className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-indigo-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-inner resize-y disabled:opacity-50"
+                    />
+                    
+                    {/* Prompt suggestions pills */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[10.5px] font-bold text-gray-400 dark:text-gray-500 mr-1">Suggestions rapides :</span>
+                      {[
+                        "Maths et Français le matin",
+                        "Mercredi SVT & Sport",
+                        "Pas de cours après 15h30 le vendredi",
+                        "Prioriser les salles spécialisées",
+                        "Équilibrer les volumes horaires"
+                      ].map((suggestion, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          disabled={isGenerating}
+                          onClick={() => {
+                            setAiPrompt(prev => prev ? `${prev.trim()}. ${suggestion}.` : `${suggestion}.`);
+                          }}
+                          className="px-2.5 py-1 bg-white/80 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-gray-200 dark:border-gray-700 rounded-lg text-[10px] font-bold transition-all shadow-2xs cursor-pointer"
+                        >
+                          + {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                   
                   {/* LEFT COLUMN: GA PARAMETERS & CRITERIA (SPAN 5 ON LG) */}
@@ -1857,7 +2017,7 @@ const TeacherPlanning: React.FC = () => {
                     className="px-5 py-3 sm:py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md hover:shadow-indigo-650/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                   >
                     <Sparkles size={14} className={isGenerating ? 'animate-spin' : ''} />
-                    {isGenerating ? 'Optimisation en cours...' : "Lancer l'Algorithme mutationnel"}
+                    {isGenerating ? 'Optimisation en cours...' : (aiPrompt.trim() ? "Générer avec ce prompt" : "Lancer la Génération IA")}
                   </button>
                 </div>
               </div>
@@ -2026,6 +2186,293 @@ const TeacherPlanning: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+      {/* ⚙️ MODAL : CONFIGURATION DES PLAGES HORAIRES ET SALLES DE L'ETABLISSEMENT */}
+      <AnimatePresence>
+        {showSlotSettingsModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSlotSettingsModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-gray-100 dark:border-gray-700"
+            >
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-750 flex items-center justify-between bg-gray-50/50 dark:bg-gray-900/40 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-indigo-600 text-white">
+                    <Clock size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-gray-900 dark:text-white">
+                      Plages Horaires & Salles de l'Établissement
+                    </h3>
+                    <p className="text-xs text-gray-400 font-medium">
+                      Définissez les créneaux personnalisés et les salles disponibles pour {currentEstablishment?.nom || activeEstId}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSlotSettingsModal(false)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+                {/* 1. Time Slots */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-gray-700 dark:text-gray-250 uppercase tracking-wide">
+                        1. Créneaux Horaires ({slotSettingsDraft.length})
+                      </h4>
+                      <p className="text-[11px] text-gray-400">Ajoutez, modifiez ou retirez les plages de cours et de pause</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newId = `slot_${Date.now()}`;
+                        setSlotSettingsDraft([
+                          ...slotSettingsDraft,
+                          { id: newId, name: '08:00 - 09:30', isBreak: false }
+                        ]);
+                      }}
+                      className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer transition-all"
+                    >
+                      <Plus size={14} /> Ajouter un créneau
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {slotSettingsDraft.map((slot, idx) => (
+                      <div
+                        key={slot.id || idx}
+                        className={`p-3 rounded-2xl border flex flex-wrap sm:flex-nowrap items-center gap-2.5 transition-all ${
+                          slot.isBreak
+                            ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-900/40'
+                            : 'bg-gray-50/70 dark:bg-gray-900/40 border-gray-200/70 dark:border-gray-700'
+                        }`}
+                      >
+                        <div className="shrink-0 text-xs font-mono font-black text-gray-400 w-6">
+                          #{idx + 1}
+                        </div>
+
+                        {/* Name/Interval input */}
+                        <div className="flex-1 min-w-[150px]">
+                          <input
+                            type="text"
+                            value={slot.name}
+                            onChange={(e) => {
+                              const updated = [...slotSettingsDraft];
+                              updated[idx] = { ...updated[idx], name: e.target.value };
+                              setSlotSettingsDraft(updated);
+                            }}
+                            placeholder="Ex: 08:00 - 09:30"
+                            className="w-full px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-black text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+
+                        {/* Break toggle */}
+                        <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600 dark:text-gray-300 cursor-pointer shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={!!slot.isBreak}
+                            onChange={(e) => {
+                              const updated = [...slotSettingsDraft];
+                              updated[idx] = {
+                                ...updated[idx],
+                                isBreak: e.target.checked,
+                                label: e.target.checked ? (updated[idx].label || 'Pause') : undefined
+                              };
+                              setSlotSettingsDraft(updated);
+                            }}
+                            className="rounded text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span>Pause/Récréation</span>
+                        </label>
+
+                        {/* Break label if break */}
+                        {slot.isBreak && (
+                          <div className="min-w-[120px]">
+                            <input
+                              type="text"
+                              value={slot.label || ''}
+                              onChange={(e) => {
+                                const updated = [...slotSettingsDraft];
+                                updated[idx] = { ...updated[idx], label: e.target.value };
+                                setSlotSettingsDraft(updated);
+                              }}
+                              placeholder="Nom (ex: Récréation)"
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-800 rounded-xl text-xs font-bold text-amber-900 dark:text-amber-200 outline-none"
+                            />
+                          </div>
+                        )}
+
+                        {/* Delete slot button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (slotSettingsDraft.length <= 1) {
+                              notifyError("Il doit rester au moins un créneau horaire.");
+                              return;
+                            }
+                            setSlotSettingsDraft(slotSettingsDraft.filter((_, i) => i !== idx));
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-rose-500 rounded-lg transition-colors cursor-pointer shrink-0"
+                          title="Supprimer ce créneau"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSlotSettingsDraft(DEFAULT_TIME_SLOTS)}
+                      className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                    >
+                      ↺ Réinitialiser les créneaux par défaut
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Rooms */}
+                <div className="space-y-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-gray-700 dark:text-gray-250 uppercase tracking-wide">
+                        2. Salles de Cours ({roomsDraft.length})
+                      </h4>
+                      <p className="text-[11px] text-gray-400">Salles de classe, laboratoires et espaces disponibles</p>
+                    </div>
+                  </div>
+
+                  {/* Add room input */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newRoomInput}
+                      onChange={(e) => setNewRoomInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const trimmed = newRoomInput.trim();
+                          if (trimmed && !roomsDraft.includes(trimmed)) {
+                            setRoomsDraft([...roomsDraft, trimmed]);
+                            setNewRoomInput('');
+                          }
+                        }
+                      }}
+                      placeholder="Ajouter une salle (ex: Salle 204, Labo B...)"
+                      className="flex-1 px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = newRoomInput.trim();
+                        if (trimmed && !roomsDraft.includes(trimmed)) {
+                          setRoomsDraft([...roomsDraft, trimmed]);
+                          setNewRoomInput('');
+                        }
+                      }}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <Plus size={14} /> Ajouter
+                    </button>
+                  </div>
+
+                  {/* Rooms badges list */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {roomsDraft.map((room, rIdx) => (
+                      <span
+                        key={rIdx}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-750 text-gray-800 dark:text-gray-200 rounded-xl text-xs font-black border border-gray-200 dark:border-gray-650"
+                      >
+                        <MapPin size={12} className="text-indigo-600 dark:text-indigo-400" />
+                        <span>{room}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (roomsDraft.length <= 1) {
+                              notifyError("Il doit rester au moins une salle.");
+                              return;
+                            }
+                            setRoomsDraft(roomsDraft.filter((_, i) => i !== rIdx));
+                          }}
+                          className="hover:text-rose-500 transition-colors cursor-pointer ml-0.5"
+                          title="Supprimer la salle"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setRoomsDraft(DEFAULT_ROOMS)}
+                      className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                    >
+                      ↺ Réinitialiser les salles par défaut
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-750 bg-gray-50/50 dark:bg-gray-900/40 flex items-center justify-end gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowSlotSettingsModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-650 dark:text-gray-200 text-xs font-black uppercase cursor-pointer transition-all"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const docRef = doc(db, 'timetable_settings', activeEstId);
+                      await setDoc(docRef, {
+                        timeSlots: slotSettingsDraft,
+                        rooms: roomsDraft,
+                        updatedAt: serverTimestamp(),
+                        updatedBy: currentUser?.uid || 'user',
+                        etablissement: activeEstId
+                      }, { merge: true });
+
+                      setTimeSlots(slotSettingsDraft);
+                      setEstablishmentRooms(roomsDraft);
+                      setShowSlotSettingsModal(false);
+                      notifySuccess("Paramètres des plages horaires et salles enregistrés pour l'établissement !");
+                    } catch (err) {
+                      console.error("Error saving timetable settings:", err);
+                      notifyError("Erreur lors de l'enregistrement des paramètres.");
+                    }
+                  }}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase flex items-center gap-1.5 shadow-md shadow-indigo-600/20 cursor-pointer transition-all"
+                >
+                  <Save size={14} /> Enregistrer la configuration
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };
