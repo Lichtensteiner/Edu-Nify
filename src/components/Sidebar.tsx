@@ -99,7 +99,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
         { id: 'parents', labelKey: 'parents', icon: Users, roles: ['admin'] },
         { id: 'access_control', labelKey: 'access_control', icon: ScanFace, roles: ['admin', 'personnel administratif', 'surveillant'] },
         { id: 'staff', labelKey: 'admin_staff', icon: Scale, roles: ['admin', 'personnel administratif', 'enseignant'] },
-        { id: 'responsibility_zones', labelKey: 'responsibility_zones', icon: ShieldCheck, roles: ['admin', 'personnel administratif', 'enseignant'] },
+        { id: 'responsibility_zones', labelKey: 'responsibility_zones', icon: ShieldCheck, roles: ['admin'] },
         { id: 'document_generator', labelKey: 'document_generator', icon: FileBadge, roles: ['admin', 'personnel administratif'] },
         { id: 'finance', labelKey: 'finance', icon: Wallet, roles: ['admin', 'comptable', 'gestionnaire_comptable', 'parent'] },
         { id: 'discipline', labelKey: 'discipline', icon: ShieldAlert, roles: ['admin', 'enseignant', 'personnel administratif'] },
@@ -178,7 +178,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
           {categories.map((category, idx) => {
             const filteredItems = category.items
               .filter(item => {
-                if ((item.id === 'dossiers_agents' || item.id === 'tech_sheet' || item.id === 'integration') && !isSuperAdmin) {
+                if ((item.id === 'dossiers_agents' || item.id === 'tech_sheet' || item.id === 'integration' || item.id === 'responsibility_zones') && !isSuperAdmin) {
                   return false;
                 }
 
@@ -208,10 +208,10 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 }
                 
                 // Direct filtered items for Students (élève)
-                if (role === 'élève') {
+                if (role === 'élève' || role === 'eleve') {
                   const allowedStudentTabs = [
                     'student_dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 
-                    'digital_binder', 'classroom', 'grades', 'homework', 'student_card', 
+                    'digital_binder', 'courses_subjects', 'classroom', 'grades', 'homework', 'student_card', 
                     'canteen', 'planning', 'surveys', 'settings'
                   ];
                   if (!allowedStudentTabs.includes(item.id)) return false;
