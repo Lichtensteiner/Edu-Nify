@@ -4,11 +4,14 @@ import { collection, getDocs, onSnapshot, doc, deleteDoc, updateDoc, query, wher
 import { db, isFirebaseConfigured } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 import { recordAuditLog } from '../services/auditService';
 
 export default function Attendance() {
   const { currentUser } = useAuth();
   const { t, language, tData } = useLanguage();
+  const { currentEstablishment } = useEstablishment();
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [attendance, setAttendance] = useState<any[]>([]);
@@ -95,6 +98,10 @@ export default function Attendance() {
           const data = doc.data();
           const role = data.role?.toLowerCase();
           
+          if ((data.etablissement || 'EDU-001') !== activeEstId) {
+            return;
+          }
+
           // Filter if teacher
           if (currentUser.role === 'enseignant' && data.classe !== currentUser.classe) {
             return;
@@ -108,7 +115,9 @@ export default function Attendance() {
         });
 
         unsubscribeAttendance = onSnapshot(collection(db, 'attendance'), (snapshot) => {
-          const rawAtt = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          const rawAtt = snapshot.docs
+            .filter(doc => (doc.data().etablissement || 'EDU-001') === activeEstId)
+            .map(doc => ({ id: doc.id, ...doc.data() }));
           
           // Combine: for each user, find their attendance or set as absent
           const combined = userSnapshotData.map(user => {
@@ -153,7 +162,7 @@ export default function Attendance() {
         unsubscribeAttendance();
       }
     };
-  }, [currentUser, selectedDate]);
+  }, [currentUser, selectedDate, activeEstId]);
 
   const handleDelete = async (id: string, record?: any) => {
     setActionLoading(id);
