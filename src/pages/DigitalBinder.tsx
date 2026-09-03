@@ -178,9 +178,12 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
   // Active module
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard');
 
+  const isStudent = currentUser?.role === 'élève' || currentUser?.role === 'eleve';
+  const studentClass = currentUser?.classe || '';
+
   // Interactive states for modules
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [selectedClass, setSelectedClass] = useState<string>(isStudent && studentClass ? studentClass : 'all');
   
   const { currentEstablishment } = useEstablishment();
   const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
@@ -228,6 +231,13 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
   const [newStudentClass, setNewStudentClass] = useState('');
   const [newStudentParentEmail, setNewStudentParentEmail] = useState('');
 
+  // Ensure student class is locked on student login
+  useEffect(() => {
+    if (isStudent && studentClass) {
+      setSelectedClass(studentClass);
+    }
+  }, [isStudent, studentClass]);
+
   // Load datasets in real-time from Firestore on mount
   useEffect(() => {
     if (!currentUser) {
@@ -241,13 +251,17 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
     const unsubClasses = onSnapshot(
       collection(db, 'classes'),
       (snapshot) => {
-        const schoolClasses = snapshot.docs
-          .map(doc => doc.data() as any)
-          .filter((c: any) => (c.etablissement || 'EDU-001') === activeEstId && !c.deleted)
-          .map((c: any) => c.nom);
-        
-        const uniqueClasses = Array.from(new Set(schoolClasses)).filter(Boolean);
-        setClassesList(uniqueClasses as string[]);
+        if (isStudent) {
+          setClassesList(studentClass ? [studentClass] : []);
+        } else {
+          const schoolClasses = snapshot.docs
+            .map(doc => doc.data() as any)
+            .filter((c: any) => (c.etablissement || 'EDU-001') === activeEstId && !c.deleted)
+            .map((c: any) => c.nom);
+          
+          const uniqueClasses = Array.from(new Set(schoolClasses)).filter(Boolean);
+          setClassesList(uniqueClasses as string[]);
+        }
       },
       (error) => console.error("Error subscribing to classes:", error)
     );
@@ -261,7 +275,7 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
           .filter((u: any) => (u.etablissement || 'EDU-001') === activeEstId);
 
         // Filter students
-        const schoolStudents = allEstUsers
+        let schoolStudents = allEstUsers
           .filter((u: any) => u.role === 'élève' || u.role === 'eleve')
           .map((u: any) => ({
             id: u.id,
@@ -274,6 +288,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
             parentEmail: u.parentEmail || u.email_parent || u.email || '',
             comportementPoints: u.comportementPoints || 100
           }));
+        
+        if (isStudent && studentClass) {
+          schoolStudents = schoolStudents.filter((s: any) => s.classe === studentClass);
+        }
         setStudents(schoolStudents);
 
         // Derive and match parents with their children
@@ -286,9 +304,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
         // 1. Registered parent users
         parentUsers.forEach((p: any) => {
           // Find children of this parent
-          const pChildren = schoolStudents.filter((s: any) => {
+          const pChildren = allEstUsers.filter((s: any) => {
+            if (s.role !== 'élève' && s.role !== 'eleve') return false;
             const hasIdMatch = p.enfant_ids?.includes(s.id) || p.children_ids?.includes(s.id);
-            const hasEmailMatch = (p.email && s.parentEmail && p.email.toLowerCase() === s.parentEmail.toLowerCase());
+            const hasEmailMatch = (p.email && (s.parentEmail || s.email_parent) && p.email.toLowerCase() === (s.parentEmail || s.email_parent).toLowerCase());
             const hasNomMatch = p.nom && s.nom && p.nom.toLowerCase() === s.nom.toLowerCase();
             return hasIdMatch || hasEmailMatch || hasNomMatch;
           });
@@ -329,7 +348,36 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
           }
         });
 
-        setParentsList(mappedParents);
+        // If user is a student, restrict strictly to their linked parent
+        if (isStudent) {
+          const linkedParents = mappedParents.filter(p => {
+            const isDirectChild = (p as any).enfant_ids?.includes(currentUser.id) || (p as any).children_ids?.includes(currentUser.id);
+            const isDirectId = p.id === currentUser.parent_id || p.id === currentUser.parentId || p.id === `parent_${currentUser.id}`;
+            const studentPEmail = (currentUser.parentEmail || currentUser.email_parent || '').toLowerCase();
+            const isEmailMatch = Boolean(studentPEmail && p.email && p.email.toLowerCase() === studentPEmail);
+            const isNameMatch = Boolean(p.childrenNames && currentUser.nom && p.childrenNames.toLowerCase().includes(currentUser.nom.toLowerCase()));
+            return isDirectChild || isDirectId || isEmailMatch || isNameMatch;
+          });
+
+          if (linkedParents.length > 0) {
+            setParentsList(linkedParents);
+          } else if (currentUser.parentEmail || currentUser.email_parent) {
+            setParentsList([{
+              id: `parent_${currentUser.id}`,
+              nom: currentUser.nom || 'Parent',
+              prenom: 'Responsable Légal',
+              email: currentUser.parentEmail || currentUser.email_parent || '',
+              telephone: (currentUser as any).parentPhone || (currentUser as any).telephone_parent || '',
+              childrenNames: `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim(),
+              childrenClasses: studentClass,
+              childrenClassList: studentClass ? [studentClass] : []
+            }]);
+          } else {
+            setParentsList([]);
+          }
+        } else {
+          setParentsList(mappedParents);
+        }
       },
       (error) => console.error("Error subscribing to users:", error)
     );
@@ -338,9 +386,12 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
     const unsubDocs = onSnapshot(
       collection(db, 'binder_documents'),
       (snapshot) => {
-        const docs = snapshot.docs
+        let docs = snapshot.docs
           .map(d => ({ id: d.id, ...d.data() } as BinderDocument))
           .filter(d => (d.etablissement || 'EDU-001') === activeEstId);
+        if (isStudent && studentClass) {
+          docs = docs.filter(d => d.classe === studentClass || d.classe === 'Toutes les classes' || !d.classe);
+        }
         docs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         setBinderDocuments(docs);
       },
@@ -351,41 +402,75 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
     const unsubAnnouncements = onSnapshot(
       collection(db, 'parent_announcements'),
       (snapshot) => {
-        const list = snapshot.docs
+        let list = snapshot.docs
           .map(d => ({ id: d.id, ...d.data() } as BinderAnnouncement))
           .filter(d => (d.etablissement || 'EDU-001') === activeEstId);
+        if (isStudent) {
+          list = list.filter(d => 
+            d.senderId === currentUser.id ||
+            (d.target && d.target.startsWith('parent_') && (d.target === `parent_${currentUser.id}` || d.target === `parent_${currentUser.parent_id}`)) ||
+            (studentClass && d.target === `class_${studentClass}`)
+          );
+        }
         list.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
         setSentAnnouncements(list);
       },
       (error) => console.error("Error subscribing to announcements:", error)
     );
 
-    // Subscribe to textbooks (filtered by teacherId)
+    // Subscribe to textbooks
     const unsubTextbooks = onSnapshot(
-      query(collection(db, 'digital_binder_textbooks'), where('teacherId', '==', currentUser.id)),
+      collection(db, 'digital_binder_textbooks'),
       (snapshot) => {
-        const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        let entries = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as any))
+          .filter((d: any) => (d.etablissement || 'EDU-001') === activeEstId);
+        if (isStudent) {
+          if (studentClass) {
+            entries = entries.filter((d: any) => d.classe === studentClass);
+          }
+        } else {
+          entries = entries.filter((d: any) => d.teacherId === currentUser.id);
+        }
         entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setTextbookEntries(entries);
       },
       (error) => console.error("Error subscribing to textbooks:", error)
     );
 
-    // Subscribe to preparations (filtered by teacherId)
+    // Subscribe to preparations
     const unsubPreparations = onSnapshot(
-      query(collection(db, 'digital_binder_preparations'), where('teacherId', '==', currentUser.id)),
+      collection(db, 'digital_binder_preparations'),
       (snapshot) => {
-        const preps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        let preps = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as any))
+          .filter((d: any) => (d.etablissement || 'EDU-001') === activeEstId);
+        if (isStudent) {
+          if (studentClass) {
+            preps = preps.filter((d: any) => d.classe === studentClass);
+          }
+        } else {
+          preps = preps.filter((d: any) => d.teacherId === currentUser.id);
+        }
         setPrepSequences(preps);
       },
       (error) => console.error("Error subscribing to preparations:", error)
     );
 
-    // Subscribe to evaluations (filtered by teacherId)
+    // Subscribe to evaluations
     const unsubEvaluations = onSnapshot(
-      query(collection(db, 'digital_binder_evaluations'), where('teacherId', '==', currentUser.id)),
+      collection(db, 'digital_binder_evaluations'),
       (snapshot) => {
-        const evals = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        let evals = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as any))
+          .filter((d: any) => (d.etablissement || 'EDU-001') === activeEstId);
+        if (isStudent) {
+          if (studentClass) {
+            evals = evals.filter((d: any) => d.classe === studentClass);
+          }
+        } else {
+          evals = evals.filter((d: any) => d.teacherId === currentUser.id);
+        }
         evals.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setEvaluations(evals);
         setLoading(false);
@@ -395,9 +480,18 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
     // Subscribe to timetable_assignments
     const unsubTimetable = onSnapshot(
-      query(collection(db, 'timetable_assignments'), where('teacherId', '==', currentUser.id)),
+      collection(db, 'timetable_assignments'),
       (snapshot) => {
-        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        let list = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as any))
+          .filter((d: any) => (d.etablissement || 'EDU-001') === activeEstId);
+        if (isStudent) {
+          if (studentClass) {
+            list = list.filter((d: any) => d.className === studentClass || d.classId === studentClass);
+          }
+        } else {
+          list = list.filter((d: any) => d.teacherId === currentUser.id);
+        }
         setTimetable(list);
       },
       (error) => console.error("Error subscribing to timetable:", error)
@@ -425,7 +519,7 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
       unsubTimetable();
       unsubNotifications();
     };
-  }, [currentUser, activeEstId]);
+  }, [currentUser, activeEstId, isStudent, studentClass]);
 
   // Modules Configurations
   const modules: ModuleConfig[] = [
@@ -525,8 +619,19 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
   const [messageTarget, setMessageTarget] = useState('all_parents');
   const [messageText, setMessageText] = useState('');
 
+  // Lock message target to linked parent when user is a student
+  useEffect(() => {
+    if (isStudent && parentsList.length > 0) {
+      setMessageTarget(`parent_${parentsList[0].id}`);
+    }
+  }, [isStudent, parentsList]);
+
   // Submit Textbook Entry
   const handleAddTextbook = async () => {
+    if (isStudent) {
+      notifyError('Les élèves ne peuvent pas ajouter de cours ni de devoirs dans le cahier de texte.');
+      return;
+    }
     if (!newTbSujet || !newTbChapitres) {
       notifyError('Veuillez remplir le sujet et le contenu du cours.');
       return;
@@ -554,6 +659,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
   };
 
   const handleDeleteTextbook = async (id: string) => {
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'digital_binder_textbooks', id));
       notifySuccess('Entrée supprimée du cahier de texte.');
@@ -565,6 +674,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
   // Submit Prep Entry
   const handleAddPrep = async () => {
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     if (!newPrepTitre || !newPrepObjectifs) {
       notifyError('Veuillez remplir le titre et les objectifs de la fiche.');
       return;
@@ -591,6 +704,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
   };
 
   const handleDeletePrep = async (id: string) => {
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'digital_binder_preparations', id));
       notifySuccess('Fiche de préparation supprimée.');
@@ -602,6 +719,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
   // Submit Evaluation
   const handleAddEval = async () => {
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     if (!newEvalTitre) {
       notifyError('Veuillez indiquer un titre d\'évaluation.');
       return;
@@ -629,6 +750,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
   };
 
   const handleDeleteEval = async (id: string) => {
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'digital_binder_evaluations', id));
       notifySuccess('Évaluation supprimée.');
@@ -640,6 +765,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
   // Submit New Class in Real-time
   const handleAddClass = async () => {
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     if (!newClassName.trim()) {
       notifyError('Veuillez indiquer un nom de classe.');
       return;
@@ -662,6 +791,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
   // Submit New Student in Real-time
   const handleAddStudent = async () => {
+    if (isStudent) {
+      notifyError('Les élèves ne peuvent pas ajouter d\'autres élèves.');
+      return;
+    }
     if (!newStudentNom.trim() || !newStudentPrenom.trim() || !newStudentClass) {
       notifyError('Veuillez remplir le nom, le prénom et sélectionner une classe.');
       return;
@@ -692,6 +825,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
   // Save Attendance Rollcall
   const handleSaveAttendance = async () => {
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     try {
       const targetStudents = students.filter(student => student.classe === attendanceClass);
       if (targetStudents.length === 0) {
@@ -737,11 +874,19 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
   // Save Competency Grades
   const handleSaveCompetencies = () => {
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     notifySuccess('Évaluation des compétences enregistrée avec succès !');
   };
 
   // Save Grades Sheet
   const handleSaveGrades = async () => {
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     try {
       const notesObj: Record<string, number> = {};
       Object.entries(gradeSheet).forEach(([stuId, noteStr]) => {
@@ -863,6 +1008,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
   const handleSaveDocument = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     if (!uploadFile || !uploadFileDataUrl) {
       notifyError('Veuillez sélectionner un fichier.');
       return;
@@ -900,6 +1049,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
   };
 
   const handleDeleteDocument = async (docId: string, docName: string) => {
+    if (isStudent) {
+      notifyError('Action non autorisée pour les élèves.');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'binder_documents', docId));
       notifySuccess(`Document "${docName}" supprimé.`);
@@ -960,9 +1113,22 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
       return;
     }
 
+    if (isStudent) {
+      if (parentsList.length === 0) {
+        notifyError("Aucun parent référent n'est lié à votre compte élève. Vous ne pouvez pas envoyer de message.");
+        return;
+      }
+    }
+
     try {
+      let finalTarget = messageTarget;
       let targetLabel = "Tous les parents de mes classes";
-      if (messageTarget === 'all_parents') {
+
+      if (isStudent) {
+        const linkedParent = parentsList[0];
+        finalTarget = `parent_${linkedParent.id}`;
+        targetLabel = `${linkedParent.prenom} ${linkedParent.nom} (Parent référent de ${currentUser?.prenom || 'l\'élève'})`;
+      } else if (messageTarget === 'all_parents') {
         targetLabel = `Tous les parents de l'établissement (${parentsList.length} parents)`;
       } else if (messageTarget.startsWith('class_')) {
         const className = messageTarget.replace('class_', '');
@@ -977,15 +1143,15 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
       await addDoc(collection(db, 'parent_announcements'), {
         senderId: currentUser?.id || 'sys',
-        senderName: `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() || 'Enseignant / Responsable',
-        target: messageTarget,
+        senderName: `${currentUser?.prenom || ''} ${currentUser?.nom || ''}`.trim() || (isStudent ? 'Élève' : 'Enseignant / Responsable'),
+        target: finalTarget,
         targetLabel,
         content: messageText.trim(),
         date: new Date().toISOString(),
         etablissement: activeEstId
       });
 
-      notifySuccess(`Message diffusé avec succès vers : ${targetLabel}`);
+      notifySuccess(`Message transmis avec succès à : ${targetLabel}`);
       setMessageText('');
     } catch (error) {
       console.error("Error sending announcement:", error);
@@ -1082,13 +1248,16 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
         <div className="relative z-10">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-500/30 text-indigo-200 text-[10px] font-black uppercase tracking-widest rounded-full mb-3 border border-indigo-400/20">
             <Sparkles size={12} className="text-indigo-300" />
-            Classeur Numérique de l'Enseignant
+            {isStudent ? `Espace Élève • Classe ${studentClass || 'Non assignée'}` : "Classeur Numérique de l'Enseignant"}
           </span>
           <h1 className="text-2xl lg:text-3xl font-black tracking-tight mb-2">
-            Espace Pédagogique Intégré
+            {isStudent ? "Mon Espace Pédagogique" : "Espace Pédagogique Intégré"}
           </h1>
           <p className="text-indigo-100/80 text-xs lg:text-sm max-w-2xl font-medium">
-            Gérez vos classes, saisissez les cahiers de texte, planifiez vos évaluations, et suivez les compétences en temps réel avec une liaison fluide vers la base de données du Gabon.
+            {isStudent 
+              ? `Consultez les cours, devoirs du cahier de texte, fiches de révision et évaluations de votre classe (${studentClass || 'votre classe'}). Vos informations sont réservées à votre établissement.`
+              : "Gérez vos classes, saisissez les cahiers de texte, planifiez vos évaluations, et suivez les compétences en temps réel avec une liaison fluide vers la base de données du Gabon."
+            }
           </p>
         </div>
       </div>
@@ -1152,32 +1321,40 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                   </div>
 
                   {/* Context Actions per Module */}
-                  {activeModule === 'textbook' && (
-                    <button
-                      onClick={() => setShowTextbookModal(true)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all"
-                    >
-                      <Plus size={16} />
-                      Nouveau Cours / Devoir
-                    </button>
-                  )}
-                  {activeModule === 'preparations' && (
-                    <button
-                      onClick={() => setShowPrepModal(true)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all"
-                    >
-                      <Plus size={16} />
-                      Créer une Séquence / Fiche
-                    </button>
-                  )}
-                  {activeModule === 'evaluations' && (
-                    <button
-                      onClick={() => setShowEvalModal(true)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all"
-                    >
-                      <Plus size={16} />
-                      Planifier une Évaluation
-                    </button>
+                  {isStudent ? (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold">
+                      Classe : {studentClass || 'Non assignée'} (Lecture seule)
+                    </div>
+                  ) : (
+                    <>
+                      {activeModule === 'textbook' && (
+                        <button
+                          onClick={() => setShowTextbookModal(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all"
+                        >
+                          <Plus size={16} />
+                          Nouveau Cours / Devoir
+                        </button>
+                      )}
+                      {activeModule === 'preparations' && (
+                        <button
+                          onClick={() => setShowPrepModal(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all"
+                        >
+                          <Plus size={16} />
+                          Créer une Séquence / Fiche
+                        </button>
+                      )}
+                      {activeModule === 'evaluations' && (
+                        <button
+                          onClick={() => setShowEvalModal(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all"
+                        >
+                          <Plus size={16} />
+                          Planifier une Évaluation
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -1275,27 +1452,35 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                 {activeModule === 'classes' && (
                   <div className="space-y-6">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
-                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Liste des classes actives</h3>
-                      <button
-                        onClick={() => setShowAddClassModal(true)}
-                        className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-black flex items-center gap-1 hover:bg-indigo-700 shadow-sm transition"
-                      >
-                        <Plus size={14} />
-                        Créer une classe
-                      </button>
+                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">
+                        {isStudent ? `Ma classe (${studentClass || 'Non assignée'})` : "Liste des classes actives"}
+                      </h3>
+                      {!isStudent && (
+                        <button
+                          onClick={() => setShowAddClassModal(true)}
+                          className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-black flex items-center gap-1 hover:bg-indigo-700 shadow-sm transition"
+                        >
+                          <Plus size={14} />
+                          Créer une classe
+                        </button>
+                      )}
                     </div>
 
                     {classesList.length === 0 ? (
                       <div className="text-center py-12 bg-gray-50/50 dark:bg-gray-800/20 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
                         <GraduationCap size={44} className="mx-auto text-gray-300 dark:text-gray-600 mb-3" />
                         <p className="text-sm font-bold text-gray-900 dark:text-white">Aucune classe n'est encore enregistrée</p>
-                        <p className="text-xs text-gray-500 mt-1 mb-4">Ajoutez en temps réel les classes de votre établissement.</p>
-                        <button
-                          onClick={() => setShowAddClassModal(true)}
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition"
-                        >
-                          Créer ma première classe
-                        </button>
+                        <p className="text-xs text-gray-500 mt-1 mb-4">
+                          {isStudent ? "Votre compte n'est pas encore rattaché à une classe." : "Ajoutez en temps réel les classes de votre établissement."}
+                        </p>
+                        {!isStudent && (
+                          <button
+                            onClick={() => setShowAddClassModal(true)}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition"
+                          >
+                            Créer ma première classe
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1344,14 +1529,18 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                 {activeModule === 'students' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
-                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Suivi des élèves</h3>
-                      <button
-                        onClick={() => setShowAddStudentModal(true)}
-                        className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-black flex items-center gap-1 hover:bg-indigo-700 shadow-sm transition"
-                      >
-                        <Plus size={14} />
-                        Ajouter un élève
-                      </button>
+                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">
+                        {isStudent ? `Élèves de ma classe (${studentClass || 'Ma classe'})` : "Suivi des élèves"}
+                      </h3>
+                      {!isStudent && (
+                        <button
+                          onClick={() => setShowAddStudentModal(true)}
+                          className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-black flex items-center gap-1 hover:bg-indigo-700 shadow-sm transition"
+                        >
+                          <Plus size={14} />
+                          Ajouter un élève
+                        </button>
+                      )}
                     </div>
 
                     {/* Filters & Search */}
@@ -1456,13 +1645,15 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                                   <Clock size={12} />
                                   {new Date(entry.date).toLocaleDateString('fr-FR', { dateStyle: 'long' })}
                                 </span>
-                                <button
-                                  onClick={() => handleDeleteTextbook(entry.id)}
-                                  className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20"
-                                  title="Supprimer"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
+                                {!isStudent && (
+                                  <button
+                                    onClick={() => handleDeleteTextbook(entry.id)}
+                                    className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20"
+                                    title="Supprimer"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
                               </div>
                             </div>
                             <div className="text-xs text-gray-600 dark:text-gray-300 space-y-2">
@@ -1516,19 +1707,21 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                                 ))}
                               </div>
                             </div>
-                            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between">
+                            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
                               <button
                                 onClick={() => notifySuccess('Téléchargement de la fiche de préparation PDF lancé !')}
                                 className="text-xs text-purple-600 hover:text-purple-800 font-bold flex items-center gap-1"
                               >
                                 <Download size={14} /> PDF
                               </button>
-                              <button
-                                onClick={() => handleDeletePrep(seq.id)}
-                                className="text-xs text-red-500 hover:text-red-700 font-bold"
-                              >
-                                Supprimer
-                              </button>
+                              {!isStudent && (
+                                <button
+                                  onClick={() => handleDeletePrep(seq.id)}
+                                  className="text-xs text-red-500 hover:text-red-700 font-bold"
+                                >
+                                  Supprimer
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))
@@ -1563,33 +1756,43 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                                 </div>
                               </div>
                               <div className="flex flex-col items-end gap-2 shrink-0 w-full sm:w-auto">
-                                <span className="text-xs text-gray-400 font-bold">
-                                  {gradedCount} copies saisies
-                                </span>
-                                <div className="flex gap-2 w-full sm:w-auto">
-                                  <button
-                                    onClick={() => {
-                                      setSelectedEvalId(ev.id);
-                                      // Prepopulate grades sheet
-                                      const prepSheet: Record<string, string> = {};
-                                      students.filter(s => s.classe === ev.classe).forEach(s => {
-                                        prepSheet[s.id] = ev.notes?.[s.id] !== undefined ? String(ev.notes[s.id]) : '';
-                                      });
-                                      setGradeSheet(prepSheet);
-                                      setActiveModule('grades');
-                                    }}
-                                    className="flex-1 sm:flex-none px-3 py-1.5 bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 text-rose-700 dark:text-rose-300 text-xs font-black rounded-lg transition-all"
-                                  >
-                                    Saisir les notes
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteEval(ev.id)}
-                                    className="px-2 py-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 border border-gray-150 dark:border-gray-700 rounded-lg transition"
-                                    title="Supprimer l'évaluation"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
+                                {!isStudent && (
+                                  <span className="text-xs text-gray-400 font-bold">
+                                    {gradedCount} copies saisies
+                                  </span>
+                                )}
+                                {isStudent ? (
+                                  <div className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-800/60 rounded-xl text-xs font-bold text-indigo-800 dark:text-indigo-300">
+                                    {ev.notes?.[currentUser?.id || ''] !== undefined 
+                                      ? `Ma note : ${ev.notes[currentUser?.id || '']} / ${ev.bareme}` 
+                                      : 'En attente de notation'}
+                                  </div>
+                                ) : (
+                                  <div className="flex gap-2 w-full sm:w-auto">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedEvalId(ev.id);
+                                        // Prepopulate grades sheet
+                                        const prepSheet: Record<string, string> = {};
+                                        students.filter(s => s.classe === ev.classe).forEach(s => {
+                                          prepSheet[s.id] = ev.notes?.[s.id] !== undefined ? String(ev.notes[s.id]) : '';
+                                        });
+                                        setGradeSheet(prepSheet);
+                                        setActiveModule('grades');
+                                      }}
+                                      className="flex-1 sm:flex-none px-3 py-1.5 bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 text-rose-700 dark:text-rose-300 text-xs font-black rounded-lg transition-all"
+                                    >
+                                      Saisir les notes
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteEval(ev.id)}
+                                      className="px-2 py-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 border border-gray-150 dark:border-gray-700 rounded-lg transition"
+                                      title="Supprimer l'évaluation"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
@@ -1602,159 +1805,249 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                 {/* MODULE 7: Notes */}
                 {activeModule === 'grades' && (
                   <div className="space-y-6">
-                    {/* Select Evaluation */}
-                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                      <div className="flex-1 w-full">
-                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Évaluation active</label>
-                        <select
-                          value={selectedEvalId}
-                          onChange={(e) => {
-                            setSelectedEvalId(e.target.value);
-                            const ev = evaluations.find(v => v.id === e.target.value);
-                            if (ev) {
-                              const prepSheet: Record<string, string> = {};
-                              students.filter(s => s.classe === ev.classe).forEach(s => {
-                                prepSheet[s.id] = ev.notes?.[s.id] !== undefined ? String(ev.notes[s.id]) : '';
-                              });
-                              setGradeSheet(prepSheet);
-                            }
-                          }}
-                          className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white"
-                        >
-                          {evaluations.map(ev => (
-                            <option key={ev.id} value={ev.id}>{ev.classe} — {ev.titre} (Coef {ev.coefficient})</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
+                    {isStudent ? (
+                      <div className="border border-gray-150 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 p-5">
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider">
+                            Mes notes d'évaluation • Classe {studentClass || 'Non assignée'}
+                          </h3>
+                          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1 rounded-xl">
+                            {evaluations.length} évaluation{evaluations.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
 
-                    {/* Grades Grid */}
-                    <div className="border border-gray-150 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 p-4">
-                      <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-4">Feuille de notes</h3>
-                      <div className="space-y-3">
-                        {students
-                          .filter(st => st.classe === evaluations.find(ev => ev.id === selectedEvalId)?.classe)
-                          .map((st) => (
-                            <div key={st.id} className="flex justify-between items-center bg-gray-50/50 dark:bg-gray-750 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                              <span className="text-xs font-black text-gray-900 dark:text-white">{st.nom} {st.prenom}</span>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max={evaluations.find(ev => ev.id === selectedEvalId)?.bareme || 20}
-                                  step="0.25"
-                                  placeholder="Non noté"
-                                  value={gradeSheet[st.id] || ''}
-                                  onChange={(e) => setGradeSheet({ ...gradeSheet, [st.id]: e.target.value })}
-                                  className="w-20 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-xs font-bold text-center text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
-                                />
-                                <span className="text-xs text-gray-400">/ {evaluations.find(ev => ev.id === selectedEvalId)?.bareme || 20}</span>
-                              </div>
-                            </div>
-                          ))}
+                        {evaluations.length === 0 ? (
+                          <div className="text-center py-8 text-gray-400 text-xs">
+                            Aucune évaluation n'a encore été programmée ou notée pour votre classe.
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {evaluations.map((ev) => {
+                              const studentNote = ev.notes?.[currentUser?.id || ''];
+                              return (
+                                <div key={ev.id} className="flex justify-between items-center bg-gray-50/50 dark:bg-gray-750 p-3.5 rounded-xl border border-gray-100 dark:border-gray-700">
+                                  <div>
+                                    <span className="text-xs font-black text-gray-900 dark:text-white block">{ev.titre}</span>
+                                    <span className="text-[11px] text-gray-400">
+                                      {ev.matiere} • Coef {ev.coefficient} • {new Date(ev.date).toLocaleDateString('fr-FR')}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    {studentNote !== undefined && studentNote !== '' ? (
+                                      <span className={`text-sm font-black px-2.5 py-1 rounded-lg ${
+                                        Number(studentNote) >= (ev.bareme / 2) 
+                                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' 
+                                          : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                                      }`}>
+                                        {studentNote} / {ev.bareme}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-gray-400 italic">Non noté</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
+                    ) : (
+                      <>
+                        {/* Select Evaluation */}
+                        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                          <div className="flex-1 w-full">
+                            <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Évaluation active</label>
+                            <select
+                              value={selectedEvalId}
+                              onChange={(e) => {
+                                setSelectedEvalId(e.target.value);
+                                const ev = evaluations.find(v => v.id === e.target.value);
+                                if (ev) {
+                                  const prepSheet: Record<string, string> = {};
+                                  students.filter(s => s.classe === ev.classe).forEach(s => {
+                                    prepSheet[s.id] = ev.notes?.[s.id] !== undefined ? String(ev.notes[s.id]) : '';
+                                  });
+                                  setGradeSheet(prepSheet);
+                                }
+                              }}
+                              className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white"
+                            >
+                              {evaluations.map(ev => (
+                                <option key={ev.id} value={ev.id}>{ev.classe} — {ev.titre} (Coef {ev.coefficient})</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
 
-                      <div className="mt-6 flex justify-end">
-                        <button
-                          onClick={handleSaveGrades}
-                          className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 flex items-center gap-2"
-                        >
-                          <Save size={16} /> Enregistrer les notes
-                        </button>
-                      </div>
-                    </div>
+                        {/* Grades Grid */}
+                        <div className="border border-gray-150 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 p-4">
+                          <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-4">Feuille de notes</h3>
+                          <div className="space-y-3">
+                            {students
+                              .filter(st => st.classe === evaluations.find(ev => ev.id === selectedEvalId)?.classe)
+                              .map((st) => (
+                                <div key={st.id} className="flex justify-between items-center bg-gray-50/50 dark:bg-gray-750 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
+                                  <span className="text-xs font-black text-gray-900 dark:text-white">{st.nom} {st.prenom}</span>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max={evaluations.find(ev => ev.id === selectedEvalId)?.bareme || 20}
+                                      step="0.25"
+                                      placeholder="Non noté"
+                                      value={gradeSheet[st.id] || ''}
+                                      onChange={(e) => setGradeSheet({ ...gradeSheet, [st.id]: e.target.value })}
+                                      className="w-20 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-xs font-bold text-center text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                    <span className="text-xs text-gray-400">/ {evaluations.find(ev => ev.id === selectedEvalId)?.bareme || 20}</span>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+
+                          <div className="mt-6 flex justify-end">
+                            <button
+                              onClick={handleSaveGrades}
+                              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 flex items-center gap-2"
+                            >
+                              <Save size={16} /> Enregistrer les notes
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
                 {/* MODULE 8: Présences */}
                 {activeModule === 'attendance' && (
                   <div className="space-y-6">
-                    {/* Controls */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Classe</label>
-                        <select
-                          value={attendanceClass}
-                          onChange={(e) => setAttendanceClass(e.target.value)}
-                          className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white"
-                        >
-                          {classesList.length === 0 ? (
-                            <option value="">Aucune classe disponible</option>
-                          ) : (
-                            classesList.map(cl => (
-                              <option key={cl} value={cl}>{cl}</option>
-                            ))
-                          )}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Date de l'appel</label>
-                        <input
-                          type="date"
-                          value={attendanceDate}
-                          onChange={(e) => setAttendanceDate(e.target.value)}
-                          className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white"
-                        />
-                      </div>
-                    </div>
+                    {isStudent ? (
+                      <div className="border border-gray-150 dark:border-gray-700 rounded-xl p-5 bg-white dark:bg-gray-800 space-y-4">
+                        <div className="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-3">
+                          <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider">
+                            Mon suivi de présence et d'assiduité • {studentClass || 'Ma classe'}
+                          </h3>
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-xl">
+                            Établissement : {currentEstablishment?.nom || activeEstId}
+                          </span>
+                        </div>
 
-                    {/* Rollcall List */}
-                    <div className="border border-gray-150 dark:border-gray-700 rounded-xl p-4 bg-white dark:bg-gray-800">
-                      <h3 className="text-xs font-black uppercase text-gray-400 mb-4 tracking-wider">Élèves inscrits</h3>
-                      <div className="space-y-3">
-                        {students
-                          .filter(st => st.classe === attendanceClass)
-                          .map((st) => {
-                            const currentStatus = attendanceSheet[st.id] || 'present';
-                            return (
-                              <div key={st.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-gray-50/50 dark:bg-gray-750 rounded-xl border border-gray-100 dark:border-gray-700">
-                                <span className="text-xs font-black text-gray-900 dark:text-white">{st.nom} {st.prenom}</span>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => setAttendanceSheet({ ...attendanceSheet, [st.id]: 'present' })}
-                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
-                                      currentStatus === 'present'
-                                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-250 dark:border-emerald-800'
-                                        : 'bg-white dark:bg-gray-850 text-gray-500 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
-                                    }`}
-                                  >
-                                    Présent
-                                  </button>
-                                  <button
-                                    onClick={() => setAttendanceSheet({ ...attendanceSheet, [st.id]: 'absent' })}
-                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
-                                      currentStatus === 'absent'
-                                        ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-250 dark:border-red-800'
-                                        : 'bg-white dark:bg-gray-850 text-gray-500 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
-                                    }`}
-                                  >
-                                    Absent
-                                  </button>
-                                  <button
-                                    onClick={() => setAttendanceSheet({ ...attendanceSheet, [st.id]: 'retard' })}
-                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
-                                      currentStatus === 'retard'
-                                        ? 'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border-yellow-250 dark:border-yellow-800'
-                                        : 'bg-white dark:bg-gray-850 text-gray-500 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
-                                    }`}
-                                  >
-                                    En retard
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/30 rounded-xl border border-emerald-200/80 dark:border-emerald-800 text-center">
+                            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-300 block mb-1">
+                              {Math.max(0, 100 - (currentUser?.absences || 0) * 3)} %
+                            </span>
+                            <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Taux de présence</span>
+                          </div>
+                          <div className="p-4 bg-rose-50/60 dark:bg-rose-950/30 rounded-xl border border-rose-200/80 dark:border-rose-800 text-center">
+                            <span className="text-2xl font-black text-rose-600 dark:text-rose-300 block mb-1">
+                              {currentUser?.absences || 0}
+                            </span>
+                            <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Absences cumulées</span>
+                          </div>
+                          <div className="p-4 bg-amber-50/60 dark:bg-amber-950/30 rounded-xl border border-amber-200/80 dark:border-amber-800 text-center">
+                            <span className="text-2xl font-black text-amber-600 dark:text-amber-300 block mb-1">
+                              {currentUser?.retards || 0}
+                            </span>
+                            <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Retards cumulés</span>
+                          </div>
+                        </div>
 
-                      <div className="mt-6 flex justify-end">
-                        <button
-                          onClick={handleSaveAttendance}
-                          className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20"
-                        >
-                          Valider l'appel
-                        </button>
+                        <div className="p-3 bg-gray-50 dark:bg-gray-750 rounded-xl text-xs text-gray-500">
+                          ℹ️ Le registre d'appel officiel est tenu quotidiennement par vos professeurs et l'équipe de la vie scolaire de l'établissement.
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <>
+                        {/* Controls */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Classe</label>
+                            <select
+                              value={attendanceClass}
+                              onChange={(e) => setAttendanceClass(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white"
+                            >
+                              {classesList.length === 0 ? (
+                                <option value="">Aucune classe disponible</option>
+                              ) : (
+                                classesList.map(cl => (
+                                  <option key={cl} value={cl}>{cl}</option>
+                                ))
+                              )}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Date de l'appel</label>
+                            <input
+                              type="date"
+                              value={attendanceDate}
+                              onChange={(e) => setAttendanceDate(e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Rollcall List */}
+                        <div className="border border-gray-150 dark:border-gray-700 rounded-xl p-4 bg-white dark:bg-gray-800">
+                          <h3 className="text-xs font-black uppercase text-gray-400 mb-4 tracking-wider">Élèves inscrits</h3>
+                          <div className="space-y-3">
+                            {students
+                              .filter(st => st.classe === attendanceClass)
+                              .map((st) => {
+                                const currentStatus = attendanceSheet[st.id] || 'present';
+                                return (
+                                  <div key={st.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-gray-50/50 dark:bg-gray-750 rounded-xl border border-gray-100 dark:border-gray-700">
+                                    <span className="text-xs font-black text-gray-900 dark:text-white">{st.nom} {st.prenom}</span>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => setAttendanceSheet({ ...attendanceSheet, [st.id]: 'present' })}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
+                                          currentStatus === 'present'
+                                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-250 dark:border-emerald-800'
+                                            : 'bg-white dark:bg-gray-850 text-gray-500 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
+                                        }`}
+                                      >
+                                        Présent
+                                      </button>
+                                      <button
+                                        onClick={() => setAttendanceSheet({ ...attendanceSheet, [st.id]: 'absent' })}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
+                                          currentStatus === 'absent'
+                                            ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-250 dark:border-red-800'
+                                            : 'bg-white dark:bg-gray-850 text-gray-500 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
+                                        }`}
+                                      >
+                                        Absent
+                                      </button>
+                                      <button
+                                        onClick={() => setAttendanceSheet({ ...attendanceSheet, [st.id]: 'retard' })}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
+                                          currentStatus === 'retard'
+                                            ? 'bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border-yellow-250 dark:border-yellow-800'
+                                            : 'bg-white dark:bg-gray-850 text-gray-500 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
+                                        }`}
+                                      >
+                                        En retard
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+
+                          <div className="mt-6 flex justify-end">
+                            <button
+                              onClick={handleSaveAttendance}
+                              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20"
+                            >
+                              Valider l'appel
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -1762,24 +2055,26 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                 {activeModule === 'competencies' && (
                   <div className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Classe</label>
-                        <select
-                          value={competencyClass}
-                          onChange={(e) => setCompetencyClass(e.target.value)}
-                          className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white"
-                        >
-                          {classesList.length === 0 ? (
-                            <option value="">Aucune classe disponible</option>
-                          ) : (
-                            classesList.map(cl => (
-                              <option key={cl} value={cl}>{cl}</option>
-                            ))
-                          )}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Compétence à évaluer</label>
+                      {!isStudent && (
+                        <div>
+                          <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Classe</label>
+                          <select
+                            value={competencyClass}
+                            onChange={(e) => setCompetencyClass(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white"
+                          >
+                            {classesList.length === 0 ? (
+                              <option value="">Aucune classe disponible</option>
+                            ) : (
+                              classesList.map(cl => (
+                                <option key={cl} value={cl}>{cl}</option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+                      )}
+                      <div className={isStudent ? "sm:col-span-2" : ""}>
+                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">Compétence à consulter</label>
                         <select
                           value={selectedCompetency}
                           onChange={(e) => setSelectedCompetency(e.target.value)}
@@ -1795,53 +2090,76 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
 
                     {/* Competency Mastery List */}
                     <div className="border border-gray-150 dark:border-gray-700 rounded-xl p-4 bg-white dark:bg-gray-800">
-                      <h3 className="text-xs font-black uppercase text-gray-400 mb-4 tracking-wider">Maîtrise des élèves</h3>
-                      <div className="space-y-3">
-                        {students
-                          .filter(st => st.classe === competencyClass)
-                          .map((st) => {
-                            const mastery = competencySheet[st.id] || 'ECA';
-                            return (
-                              <div key={st.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-gray-50/50 dark:bg-gray-750 rounded-xl border border-gray-100 dark:border-gray-700">
-                                <span className="text-xs font-black text-gray-900 dark:text-white">{st.nom} {st.prenom}</span>
-                                <div className="flex gap-1.5">
-                                  {(['TBM', 'A', 'ECA', 'NA'] as const).map((level) => {
-                                    const labels = { TBM: 'Très Bonne', A: 'Acquis', ECA: 'En Cours', NA: 'Non Acquis' };
-                                    const colors = {
-                                      TBM: 'bg-green-150 text-green-850 border-green-300 dark:bg-green-950/40',
-                                      A: 'bg-emerald-100 text-emerald-800 border-emerald-250 dark:bg-emerald-950/20',
-                                      ECA: 'bg-amber-100 text-amber-800 border-amber-250 dark:bg-amber-950/20',
-                                      NA: 'bg-red-100 text-red-800 border-red-250 dark:bg-red-950/20'
-                                    };
-                                    const isSel = mastery === level;
-                                    return (
-                                      <button
-                                        key={level}
-                                        onClick={() => setCompetencySheet({ ...competencySheet, [st.id]: level })}
-                                        className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border ${
-                                          isSel 
-                                            ? colors[level]
-                                            : 'bg-white dark:bg-gray-850 text-gray-400 border-gray-200 dark:border-gray-750 hover:bg-gray-50'
-                                        }`}
-                                      >
-                                        {labels[level]}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
+                      <h3 className="text-xs font-black uppercase text-gray-400 mb-4 tracking-wider">
+                        {isStudent ? `Évaluation de la compétence • ${currentUser?.prenom || ''} ${currentUser?.nom || ''}` : "Maîtrise des élèves"}
+                      </h3>
+                      {isStudent ? (
+                        <div className="p-4 bg-gray-50 dark:bg-gray-750 rounded-xl border border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                          <div>
+                            <span className="text-xs font-black text-gray-900 dark:text-white block">
+                              {currentUser?.nom} {currentUser?.prenom}
+                            </span>
+                            <span className="text-[11px] text-gray-400">
+                              Compétence : {selectedCompetency} • Classe {studentClass || ''}
+                            </span>
+                          </div>
+                          <span className="px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-250 dark:border-emerald-800">
+                            {competencySheet[currentUser?.id || ''] === 'TBM' ? 'Très Bonne Maîtrise' :
+                             competencySheet[currentUser?.id || ''] === 'A' ? 'Acquis' :
+                             competencySheet[currentUser?.id || ''] === 'ECA' ? 'En Cours d\'Acquisition' :
+                             competencySheet[currentUser?.id || ''] === 'NA' ? 'Non Acquis' : 'Acquis'}
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="space-y-3">
+                            {students
+                              .filter(st => st.classe === competencyClass)
+                              .map((st) => {
+                                const mastery = competencySheet[st.id] || 'ECA';
+                                return (
+                                  <div key={st.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-gray-50/50 dark:bg-gray-750 rounded-xl border border-gray-100 dark:border-gray-700">
+                                    <span className="text-xs font-black text-gray-900 dark:text-white">{st.nom} {st.prenom}</span>
+                                    <div className="flex gap-1.5">
+                                      {(['TBM', 'A', 'ECA', 'NA'] as const).map((level) => {
+                                        const labels = { TBM: 'Très Bonne', A: 'Acquis', ECA: 'En Cours', NA: 'Non Acquis' };
+                                        const colors = {
+                                          TBM: 'bg-green-150 text-green-850 border-green-300 dark:bg-green-950/40',
+                                          A: 'bg-emerald-100 text-emerald-800 border-emerald-250 dark:bg-emerald-950/20',
+                                          ECA: 'bg-amber-100 text-amber-800 border-amber-250 dark:bg-amber-950/20',
+                                          NA: 'bg-red-100 text-red-800 border-red-250 dark:bg-red-950/20'
+                                        };
+                                        const isSel = mastery === level;
+                                        return (
+                                          <button
+                                            key={level}
+                                            onClick={() => setCompetencySheet({ ...competencySheet, [st.id]: level })}
+                                            className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border ${
+                                              isSel 
+                                                ? colors[level]
+                                                : 'bg-white dark:bg-gray-850 text-gray-400 border-gray-200 dark:border-gray-750 hover:bg-gray-50'
+                                            }`}
+                                          >
+                                            {labels[level]}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
 
-                      <div className="mt-6 flex justify-end">
-                        <button
-                          onClick={handleSaveCompetencies}
-                          className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20"
-                        >
-                          Enregistrer les compétences
-                        </button>
-                      </div>
+                          <div className="mt-6 flex justify-end">
+                            <button
+                              onClick={handleSaveCompetencies}
+                              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20"
+                            >
+                              Enregistrer les compétences
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1849,54 +2167,56 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                 {/* MODULE 10: Documents */}
                 {activeModule === 'documents' && (
                   <div className="space-y-6">
-                    {/* Upload Dropzone & Button */}
-                    <div 
-                      onDragEnter={handleDrag}
-                      onDragLeave={handleDrag}
-                      onDragOver={handleDrag}
-                      onDrop={handleDrop}
-                      className={`p-6 rounded-2xl border-2 border-dashed transition-all text-center ${
-                        dragActive 
-                          ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 ring-4 ring-indigo-500/10' 
-                          : 'border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/60 hover:border-indigo-400'
-                      }`}
-                    >
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        id="document-file-input"
-                        className="hidden"
-                        onChange={handleFileSelect}
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt,.csv"
-                      />
-                      
-                      <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-xs">
-                        <UploadCloud size={24} />
-                      </div>
-                      
-                      <h4 className="text-sm font-black text-gray-900 dark:text-white mb-1">
-                        Ajouter un document au classeur
-                      </h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-4">
-                        Glissez-déposez un fichier ici ou parcourez les dossiers de votre appareil (PDF, Word, Excel, Images jusqu'à 15 Mo).
-                      </p>
-
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
+                    {/* Upload Dropzone & Button (Teachers/Admins only) */}
+                    {!isStudent && (
+                      <div 
+                        onDragEnter={handleDrag}
+                        onDragLeave={handleDrag}
+                        onDragOver={handleDrag}
+                        onDrop={handleDrop}
+                        className={`p-6 rounded-2xl border-2 border-dashed transition-all text-center ${
+                          dragActive 
+                            ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 ring-4 ring-indigo-500/10' 
+                            : 'border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/60 hover:border-indigo-400'
+                        }`}
                       >
-                        <FolderOpen size={16} />
-                        Parcourir mon appareil
-                      </button>
-                    </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          id="document-file-input"
+                          className="hidden"
+                          onChange={handleFileSelect}
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt,.csv"
+                        />
+                        
+                        <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-xs">
+                          <UploadCloud size={24} />
+                        </div>
+                        
+                        <h4 className="text-sm font-black text-gray-900 dark:text-white mb-1">
+                          Ajouter un document au classeur
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-4">
+                          Glissez-déposez un fichier ici ou parcourez les dossiers de votre appareil (PDF, Word, Excel, Images jusqu'à 15 Mo).
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
+                        >
+                          <FolderOpen size={16} />
+                          Parcourir mon appareil
+                        </button>
+                      </div>
+                    )}
 
                     {/* Uploaded Documents List */}
                     <div>
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider flex items-center gap-2">
                           <FileText size={14} className="text-indigo-600" />
-                          Documents enregistrés ({binderDocuments.length})
+                          Documents {isStudent ? `de ma classe (${studentClass || 'Ma classe'})` : 'enregistrés'} ({binderDocuments.length})
                         </h3>
                         <span className="text-[11px] text-gray-400">
                           Établissement : {currentEstablishment?.nom || activeEstId}
@@ -1909,10 +2229,13 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                             <FolderOpen size={22} />
                           </div>
                           <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                            Aucun document téléversé
+                            Aucun document disponible
                           </h4>
                           <p className="text-[11px] text-gray-400 max-w-sm mx-auto">
-                            Utilisez le bouton ci-dessus pour téléverser votre premier cours, fiche d'exercice ou support de révision depuis votre appareil.
+                            {isStudent
+                              ? "Aucun support ou document pédagogique n'a encore été mis en ligne pour votre classe."
+                              : "Utilisez le bouton ci-dessus pour téléverser votre premier cours, fiche d'exercice ou support de révision depuis votre appareil."
+                            }
                           </p>
                         </div>
                       ) : (
@@ -1939,13 +2262,15 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                                     </div>
                                   </div>
                                   
-                                  <button
-                                    onClick={() => handleDeleteDocument(docItem.id, docItem.name)}
-                                    title="Supprimer ce document"
-                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
+                                  {!isStudent && (
+                                    <button
+                                      onClick={() => handleDeleteDocument(docItem.id, docItem.name)}
+                                      title="Supprimer ce document"
+                                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
                                 </div>
 
                                 <div className="flex flex-wrap gap-1.5 mt-2">
@@ -1998,67 +2323,96 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                         <div>
                           <h3 className="text-sm font-black text-gray-900 dark:text-white flex items-center gap-2">
                             <MessageCircle size={16} className="text-indigo-600" />
-                            Messagerie & Communications Parents
+                            {isStudent ? "Messagerie avec mon Parent Référent" : "Messagerie & Communications Parents"}
                           </h3>
                           <p className="text-[11px] text-gray-400">
-                            Diffusez des annonces, convocations ou alertes aux parents d'élèves en temps réel pour l'établissement.
+                            {isStudent
+                              ? "Communiquez directement et exclusivement avec votre parent ou responsable légal lié."
+                              : "Diffusez des annonces, convocations ou alertes aux parents d'élèves en temps réel pour l'établissement."
+                            }
                           </p>
                         </div>
                         <div className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-[10px] font-bold self-start sm:self-auto">
-                          {parentsList.length} parents répertoriés
+                          {isStudent 
+                            ? (parentsList.length > 0 ? '1 parent référent lié' : 'Aucun parent lié') 
+                            : `${parentsList.length} parents répertoriés`
+                          }
                         </div>
                       </div>
                       
-                      {/* Destination Selector with Dynamic Parents & Classes */}
-                      <div>
-                        <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">
-                          Destinataires (Filtre par Établissement et Classes Créées)
-                        </label>
-                        <select
-                          value={messageTarget}
-                          onChange={(e) => setMessageTarget(e.target.value)}
-                          className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                        >
-                          <optgroup label="Diffusion Globale">
-                            <option value="all_parents">
-                              📢 Tous les parents de l'établissement ({parentsList.length} parents)
-                            </option>
-                          </optgroup>
+                      {/* Destination Selector */}
+                      {isStudent ? (
+                        <div>
+                          <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">
+                            Destinataire (Parent lié uniquement)
+                          </label>
+                          {parentsList.length === 0 ? (
+                            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-200 font-medium">
+                              ⚠️ Aucun parent référent n'est actuellement rattaché à votre compte élève. Veuillez contacter l'administration de l'établissement pour associer votre parent.
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center justify-between">
+                              <span>👤 {parentsList[0].prenom} {parentsList[0].nom} {parentsList[0].email ? `(${parentsList[0].email})` : ''}</span>
+                              <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900/60 px-2 py-0.5 rounded text-indigo-700 dark:text-indigo-300 font-black">
+                                Parent lié exclusif
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">
+                            Destinataires (Filtre par Établissement et Classes Créées)
+                          </label>
+                          <select
+                            value={messageTarget}
+                            onChange={(e) => setMessageTarget(e.target.value)}
+                            className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                          >
+                            <optgroup label="Diffusion Globale">
+                              <option value="all_parents">
+                                📢 Tous les parents de l'établissement ({parentsList.length} parents)
+                              </option>
+                            </optgroup>
 
-                          {classesList.length > 0 && (
-                            <optgroup label="Par Classe de l'Établissement">
-                              {classesList.map(classeName => {
-                                const countInClass = parentsList.filter(p => p.childrenClassList.includes(classeName)).length;
-                                return (
-                                  <option key={`class_${classeName}`} value={`class_${classeName}`}>
-                                    🏫 Parents des élèves de {classeName} ({countInClass} parent{countInClass > 1 ? 's' : ''})
+                            {classesList.length > 0 && (
+                              <optgroup label="Par Classe de l'Établissement">
+                                {classesList.map(classeName => {
+                                  const countInClass = parentsList.filter(p => p.childrenClassList.includes(classeName)).length;
+                                  return (
+                                    <option key={`class_${classeName}`} value={`class_${classeName}`}>
+                                      🏫 Parents des élèves de {classeName} ({countInClass} parent{countInClass > 1 ? 's' : ''})
+                                    </option>
+                                  );
+                                })}
+                              </optgroup>
+                            )}
+
+                            {parentsList.length > 0 && (
+                              <optgroup label="Parents Individuels">
+                                {parentsList.map(parent => (
+                                  <option key={parent.id} value={`parent_${parent.id}`}>
+                                    👤 {parent.nom} {parent.prenom} {parent.childrenNames ? `(Parent de : ${parent.childrenNames} - ${parent.childrenClasses})` : `(${parent.email})`}
                                   </option>
-                                );
-                              })}
-                            </optgroup>
-                          )}
-
-                          {parentsList.length > 0 && (
-                            <optgroup label="Parents Individuels">
-                              {parentsList.map(parent => (
-                                <option key={parent.id} value={`parent_${parent.id}`}>
-                                  👤 {parent.nom} {parent.prenom} {parent.childrenNames ? `(Parent de : ${parent.childrenNames} - ${parent.childrenClasses})` : `(${parent.email})`}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </select>
-                      </div>
+                                ))}
+                              </optgroup>
+                            )}
+                          </select>
+                        </div>
+                      )}
 
                       <div>
                         <label className="block text-[10px] uppercase font-black text-gray-400 mb-1.5">
-                          Contenu du message d'alerte, de convocation ou d'annonce
+                          {isStudent ? "Message à destination de votre parent" : "Contenu du message d'alerte, de convocation ou d'annonce"}
                         </label>
                         <textarea
                           rows={4}
                           value={messageText}
                           onChange={(e) => setMessageText(e.target.value)}
-                          placeholder="Bonjour chers parents, je vous informe qu'une évaluation ou une réunion pédagogique est prévue..."
+                          placeholder={isStudent 
+                            ? "Bonjour, je t'écris pour te tenir informé(e) de mes cours ou devoirs..." 
+                            : "Bonjour chers parents, je vous informe qu'une évaluation ou une réunion pédagogique est prévue..."
+                          }
                           className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-xs text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none leading-relaxed"
                         />
                       </div>
@@ -2070,9 +2424,10 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                         <button
                           type="button"
                           onClick={handleSendMessage}
-                          className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all"
+                          disabled={isStudent && parentsList.length === 0}
+                          className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-black rounded-xl shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all"
                         >
-                          <Send size={14} /> Envoyer aux parents
+                          <Send size={14} /> {isStudent ? 'Envoyer à mon parent' : 'Envoyer aux parents'}
                         </button>
                       </div>
                     </div>
