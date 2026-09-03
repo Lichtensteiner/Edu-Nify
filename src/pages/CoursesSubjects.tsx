@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 import { collection, query, where, onSnapshot, orderBy, addDoc, serverTimestamp, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../lib/firebase';
@@ -36,15 +37,20 @@ interface CoursesSubjectsProps {
 export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps) {
   const { t } = useLanguage();
   const { currentUser } = useAuth();
+  const { currentEstablishment, isSuperAdmin } = useEstablishment();
   const { notifySuccess, notifyError, notifyDelete, notifyUpdate, notifyAdd } = useNotification();
+  
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
+
   const [classes, setClasses] = useState<any[]>([]);
   const [preparations, setPreparations] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<{id: string, name: string, teacherId?: string, teacherName?: string}[]>([]);
+  const [subjects, setSubjects] = useState<{id: string, name: string, teacherId?: string, teacherName?: string, etablissement?: string}[]>([]);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectTeacherId, setNewSubjectTeacherId] = useState('');
   const [editingSubject, setEditingSubject] = useState<{id: string, name: string, teacherId?: string} | null>(null);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
+  const [isInitializingSubjects, setIsInitializingSubjects] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
@@ -79,7 +85,7 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
 
   const isAdmin = currentUser?.role === 'admin' || 
                   currentUser?.email === 'martinienmvezogo@gmail.com';
-  const isStudent = currentUser?.role === 'élève';
+  const isStudent = currentUser?.role === 'élève' || currentUser?.role === 'eleve';
 
   useEffect(() => {
     if (initialPrepId && preparations.length > 0) {
@@ -91,10 +97,12 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
   }, [initialPrepId, preparations]);
 
   useEffect(() => {
-    // Dynamic fetch of all registered classes in the database
+    // Dynamic fetch of all registered classes in the active establishment
     const q = query(collection(db, 'classes'));
     const unsubscribe = onSnapshot(q, (snap) => {
-      const loadedClasses = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let loadedClasses = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Filter by active establishment
+      loadedClasses = loadedClasses.filter((c: any) => (c.etablissement || 'EDU-001') === activeEstId && !c.deleted);
       // Sort classes alphabetically by name
       loadedClasses.sort((a: any, b: any) => (a.nom || '').localeCompare(b.nom || ''));
       setAllDbClasses(loadedClasses);
@@ -102,12 +110,12 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
       console.error("Error loading all db classes:", error);
     });
     return () => unsubscribe();
-  }, []);
+  }, [activeEstId]);
 
   useEffect(() => {
     if (!currentUser) return;
 
-    // Fetch classes
+    // Fetch classes for active establishment
     let classesQuery;
     if (isAdmin) {
       classesQuery = query(collection(db, 'classes'));
@@ -119,7 +127,8 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
     }
 
     const unsubscribeClasses = onSnapshot(classesQuery, (snap) => {
-      const classesData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let classesData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      classesData = classesData.filter((c: any) => (c.etablissement || 'EDU-001') === activeEstId && !c.deleted);
       setClasses(classesData);
     }, (error) => {
       console.error("Error fetching classes:", error);
@@ -144,25 +153,26 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
         where('authorId', '==', currentUser.id)
       );
     } else {
-      // Other roles (like cuisinier) see all published courses (resources)
       prepsQuery = query(collection(db, 'resources'));
     }
 
     const unsubscribePreps = onSnapshot(prepsQuery, (snap) => {
-      const preps = snap.docs.map(doc => {
+      let preps = snap.docs.map(doc => {
         const data = doc.data();
         return { 
           id: doc.id, 
           ...data,
-          // Map resource fields to preparation-like fields for UI compatibility if needed
           topic: data.topic || data.title,
           content: data.content || data.description,
           fileUrl: data.fileUrl || data.url,
           grade: data.grade || data.class_name,
-          // Handle resources having string timestamp vs preparations having serverTimestamp
           createdAt: data.createdAt || (data.timestamp ? { toDate: () => new Date(data.timestamp) } : null)
         };
       });
+
+      // Filter by active establishment
+      preps = preps.filter((p: any) => !p.etablissement || p.etablissement === activeEstId);
+
       preps.sort((a: any, b: any) => {
         const dateA = a.createdAt?.toDate?.() || new Date(0);
         const dateB = b.createdAt?.toDate?.() || new Date(0);
@@ -176,34 +186,27 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
       setLoading(false);
     });
 
-    // Fetch teachers
+    // Fetch teachers belonging to the active establishment
     const teachersQuery = query(collection(db, 'users'), where('role', '==', 'enseignant'));
     const unsubscribeTeachers = onSnapshot(teachersQuery, (snap) => {
-      const teachersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+      let teachersData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+      teachersData = teachersData.filter((t: any) => (t.etablissement || 'EDU-001') === activeEstId);
       setTeachers(teachersData.sort((a, b) => (a.nom || '').localeCompare(b.nom || '')));
     });
 
-    // Fetch Subjects
+    // Fetch Subjects strictly belonging to the active establishment
     const unsubscribeSubjects = onSnapshot(collection(db, 'subjects'), (snap) => {
-      const subjectsData = snap.docs.map(doc => ({ 
+      let subjectsData = snap.docs.map(doc => ({ 
         id: doc.id, 
         name: doc.data().name as string,
         teacherId: doc.data().teacherId,
-        teacherName: doc.data().teacherName
+        teacherName: doc.data().teacherName,
+        etablissement: doc.data().etablissement || 'EDU-001'
       }));
-      setSubjects(subjectsData.sort((a, b) => a.name.localeCompare(b.name)));
-      
-      // Auto-populate if empty and user is admin
-      if (snap.empty && isAdmin) {
-        console.log("Subjects list is empty, auto-populating from constants...");
-        SCHOOL_SUBJECTS.forEach(async (subj) => {
-          try {
-            await addDoc(collection(db, 'subjects'), { name: subj, createdAt: serverTimestamp() });
-          } catch (error) {
-            console.error("Error auto-populating subjects:", error);
-          }
-        });
-      }
+
+      // Strictly filter to the current establishment
+      subjectsData = subjectsData.filter(s => s.etablissement === activeEstId);
+      setSubjects(subjectsData.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
     }, (error) => {
       console.error("Error fetching subjects:", error);
       if (error.message.includes('permission')) {
@@ -218,7 +221,35 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
       unsubscribeSubjects();
       unsubscribeTeachers();
     };
-  }, [currentUser]);
+  }, [currentUser, activeEstId]);
+
+  const handleInitializeSuggestedSubjects = async () => {
+    if (!isAdmin) return;
+    setIsInitializingSubjects(true);
+    try {
+      let count = 0;
+      for (const subj of SCHOOL_SUBJECTS) {
+        // Only add if not already in establishment's subjects
+        const alreadyExists = subjects.some(s => s.name.toLowerCase() === subj.toLowerCase());
+        if (!alreadyExists) {
+          await addDoc(collection(db, 'subjects'), {
+            name: subj,
+            etablissement: activeEstId,
+            teacherId: '',
+            teacherName: '',
+            createdAt: serverTimestamp()
+          });
+          count++;
+        }
+      }
+      notifySuccess(`${count} matières recommandées ont été initialisées pour cet établissement.`);
+    } catch (err) {
+      console.error("Error initializing subjects:", err);
+      notifyError("Erreur lors de l'initialisation des matières.");
+    } finally {
+      setIsInitializingSubjects(false);
+    }
+  };
 
   const handleAddSubject = async () => {
     if (!newSubjectName.trim()) return;
@@ -227,24 +258,23 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
     const selectedTeacher = teachers.find(t => t.id === newSubjectTeacherId);
     const teacherName = selectedTeacher ? `${selectedTeacher.prenom} ${selectedTeacher.nom}` : '';
 
-    console.log("Attempting to add global subject:", newSubjectName.trim(), "Teacher:", teacherName);
     setIsAddingSubject(true);
     try {
       await addDoc(collection(db, 'subjects'), {
         name: newSubjectName.trim(),
         teacherId: newSubjectTeacherId || '',
         teacherName: teacherName,
+        etablissement: activeEstId,
         createdAt: serverTimestamp()
       });
-      console.log("Subject added successfully");
       
       if (currentUser) {
         await recordAuditLog({
           userId: currentUser.id,
           userName: `${currentUser.prenom} ${currentUser.nom}`,
           userRole: currentUser.role,
-          action: "Ajout de matière globale",
-          details: `${newSubjectName.trim()} (Enseignant: ${teacherName || 'Aucun'})`,
+          action: "Ajout de matière",
+          details: `${newSubjectName.trim()} (Établissement: ${activeEstId}, Enseignant: ${teacherName || 'Aucun'})`,
           category: 'management'
         });
       }
@@ -457,6 +487,7 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
       await addDoc(collection(db, 'preparations'), {
         ...newCourse,
         ...fileData,
+        etablissement: activeEstId,
         authorId: currentUser.id,
         authorName: `${currentUser.prenom} ${currentUser.nom}`,
         createdAt: serverTimestamp(),
@@ -467,7 +498,7 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
         userName: `${currentUser.prenom} ${currentUser.nom}`,
         userRole: currentUser.role,
         action: "Création de cours",
-        details: `Titre: ${newCourse.topic}, Matière: ${newCourse.subject} (${newCourse.grade})`,
+        details: `Titre: ${newCourse.topic}, Matière: ${newCourse.subject} (${newCourse.grade}), Établissement: ${activeEstId}`,
         category: 'homework'
       });
 
@@ -501,6 +532,7 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
           subject: selectedPrep.subject,
           class_name: className,
           teacher_id: currentUser.id,
+          etablissement: activeEstId,
           url: selectedPrep.fileUrl || '',
           type: selectedPrep.fileUrl ? (selectedPrep.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? 'image' : 'document') : 'document',
           timestamp: new Date().toISOString()
@@ -514,7 +546,7 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
         userName: `${currentUser.prenom} ${currentUser.nom}`,
         userRole: currentUser.role,
         action: "Publication de cours à la classe",
-        details: `Cours: ${selectedPrep.topic}, Classes: ${classesToPublish.join(', ')}`,
+        details: `Cours: ${selectedPrep.topic}, Classes: ${classesToPublish.join(', ')}, Établissement: ${activeEstId}`,
         category: 'homework'
       });
       
@@ -994,9 +1026,26 @@ export default function CoursesSubjects({ initialPrepId }: CoursesSubjectsProps)
                 </table>
               </div>
             ) : (
-              <div className="text-center py-12 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
-                <RefreshCw size={32} className="mx-auto text-gray-300 animate-spin mb-4" />
-                <p className="text-gray-500 dark:text-gray-400 font-medium">Chargement du répertoire des matières...</p>
+              <div className="text-center py-12 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 p-6">
+                <BookOpen size={44} className="mx-auto text-indigo-400 mb-3 opacity-60" />
+                <h4 className="text-base font-bold text-gray-900 dark:text-white mb-1">Aucune matière enregistrée pour cet établissement</h4>
+                <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-5">
+                  {isAdmin 
+                    ? `En tant que responsable de cet établissement (${currentEstablishment?.nom || 'actif'}), vous pouvez créer vos propres matières manuellement ci-dessus ou importer les matières standards.`
+                    : "Aucune matière n'a encore été configurée par l'administration de cet établissement."}
+                </p>
+                {isAdmin && (
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      onClick={handleInitializeSuggestedSubjects}
+                      disabled={isInitializingSubjects}
+                      className="px-5 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-sm"
+                    >
+                      {isInitializingSubjects ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                      Initialiser les matières recommandées pour cet établissement
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
