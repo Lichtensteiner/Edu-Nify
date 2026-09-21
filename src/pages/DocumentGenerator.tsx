@@ -318,27 +318,36 @@ Génère une réponse sous forme d'un objet JSON pur et valide (sans aucun blabl
     const fetchStudents = async () => {
       setLoading(true);
       try {
-        // Fetch all classes first
+        const estId = activeEst?.id || 'EDU-001';
+
+        // Fetch classes filtered by active establishment
         const classesSnapshot = await getDocs(collection(db, 'classes'));
-        const classesData = classesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+        const classesData = classesSnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter((cls: any) => (cls.etablissement || 'EDU-001') === estId) as any[];
         const classesMap = new Map();
         
-        // Fetch all houses
+        // Fetch houses filtered by active establishment
         const housesSnapshot = await getDocs(collection(db, 'houses'));
         const housesMap = new Map();
         housesSnapshot.forEach(doc => {
-          housesMap.set(doc.id, doc.data().nom_maison);
+          const hData = doc.data();
+          if ((hData.etablissement || 'EDU-001') === estId) {
+            housesMap.set(doc.id, hData.nom_maison);
+          }
         });
 
-        // Fetch all teachers to resolve main teacher names
+        // Fetch teachers filtered by active establishment
         const teachersSnapshot = await getDocs(query(collection(db, 'users'), where('role', '==', 'enseignant')));
         const teachersList: {id: string, name: string}[] = [];
         const teachersMap = new Map();
         teachersSnapshot.forEach(doc => {
           const data = doc.data();
-          const name = `${data.prenom || ''} ${data.nom || ''}`.trim();
-          teachersMap.set(doc.id, name);
-          teachersList.push({ id: doc.id, name });
+          if ((data.etablissement || 'EDU-001') === estId) {
+            const name = `${data.prenom || ''} ${data.nom || ''}`.trim();
+            teachersMap.set(doc.id, name);
+            teachersList.push({ id: doc.id, name });
+          }
         });
         setTeachers(teachersList);
 
@@ -352,30 +361,32 @@ Génère une réponse sous forme d'un objet JSON pur et valide (sans aucun blabl
         });
         setClasses(classesList);
 
-        // Fetch students
+        // Fetch students filtered by active establishment
         const q = query(collection(db, 'users'), where('role', 'in', ['élève', 'eleve']));
         const snapshot = await getDocs(q);
         
-        const studentsList = snapshot.docs.map(doc => {
-          const data = doc.data();
-          // Resolution of class info from ID or name
-          let classInfo = data.classId ? classesMap.get(data.classId) : null;
-          
-          if (!classInfo && (data.classe || data.className)) {
-            // Try to match the 'classe' string with the names in our classesMap
-            const targetName = data.classe || data.className;
-            const foundClass = Array.from(classesMap.values()).find((c: any) => c.name === targetName);
-            if (foundClass) classInfo = foundClass;
-          }
+        const studentsList = snapshot.docs
+          .filter(doc => (doc.data().etablissement || 'EDU-001') === estId)
+          .map(doc => {
+            const data = doc.data();
+            // Resolution of class info from ID or name
+            let classInfo = data.classId ? classesMap.get(data.classId) : null;
+            
+            if (!classInfo && (data.classe || data.className)) {
+              // Try to match the 'classe' string with the names in our classesMap
+              const targetName = data.classe || data.className;
+              const foundClass = Array.from(classesMap.values()).find((c: any) => c.name === targetName);
+              if (foundClass) classInfo = foundClass;
+            }
 
-          return { 
-            id: doc.id, 
-            ...data,
-            className: classInfo ? classInfo.name : (data.classe || data.className || 'Non assignée'),
-            mainTeacher: classInfo ? classInfo.mainTeacher : 'Non assigné',
-            houseName: data.house_id ? housesMap.get(data.house_id) : 'N/A'
-          } as Student;
-        });
+            return { 
+              id: doc.id, 
+              ...data,
+              className: classInfo ? classInfo.name : (data.classe || data.className || 'Non assignée'),
+              mainTeacher: classInfo ? classInfo.mainTeacher : 'Non assigné',
+              houseName: data.house_id ? housesMap.get(data.house_id) : 'N/A'
+            } as Student;
+          });
 
         setStudents(studentsList);
       } catch (err) {
@@ -385,7 +396,7 @@ Génère une réponse sous forme d'un objet JSON pur et valide (sans aucun blabl
       }
     };
     fetchStudents();
-  }, []);
+  }, [activeEst?.id]);
 
   // Helper to get image data URL
   const getImageDataUrl = (url: string): Promise<string> => {
