@@ -45,14 +45,14 @@ export default function Classes() {
     // Fetch classes filtered by active establishment ID
     const unsubscribeClasses = onSnapshot(collection(db, 'classes'), (snap) => {
       let classesData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      classesData = classesData.filter((c: any) => c.etablissement === activeEstId && !c.deleted);
+      classesData = classesData.filter((c: any) => (c.etablissement || 'EDU-001') === activeEstId && !c.deleted);
       setClasses(classesData);
     });
 
     // Fetch users (teachers and students) filtered by active establishment ID
     const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snap) => {
       const usersData: any[] = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const filteredUsers = usersData.filter((u: any) => u.etablissement === activeEstId);
+      const filteredUsers = usersData.filter((u: any) => (u.etablissement || 'EDU-001') === activeEstId);
       
       setTeachers(filteredUsers
         .filter(u => u.role === 'enseignant')
@@ -152,6 +152,7 @@ export default function Classes() {
       } else if (modalMode === 'edit' && selectedClass) {
         await updateDoc(doc(db, 'classes', selectedClass.id), {
           ...formData,
+          etablissement: selectedClass.etablissement || activeEstId,
           updatedAt: new Date().toISOString()
         });
 
