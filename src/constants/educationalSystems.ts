@@ -12,6 +12,7 @@ export interface SystemHonorsTier {
 export interface SystemConfig {
   name: string;
   flag: string;
+  description?: string;
   cycles: string[];
   niveaux: string[];
   diplomas: string[];
@@ -32,6 +33,7 @@ export interface SystemConfig {
     requireRanking: boolean;
     requireExamBypassCode: boolean;
   };
+  [key: string]: any;
 }
 
 export const HIGHER_EDUCATION_DIPLOMAS: string[] = [
