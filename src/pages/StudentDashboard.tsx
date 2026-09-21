@@ -24,8 +24,10 @@ import {
   Sparkles,
   Image as ImageIcon,
   FileText,
-  ListTodo
+  ListTodo,
+  Download
 } from 'lucide-react';
+import { downloadCourseFile, getFileTypeBadge } from '../utils/courseFileManager';
 import { 
   AreaChart, 
   Area, 
@@ -140,10 +142,24 @@ export default function StudentDashboard({ onNavigate }: { onNavigate?: (tab: st
       : query(collection(db, 'resources'), orderBy('timestamp', 'desc'), limit(10));
 
     const unsubscribeCourses = onSnapshot(coursesQuery, (snapshot) => {
-      const coursesData = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data()
-      }));
+      const coursesData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const resolvedUrl = data.fileUrl || data.url || data.file_url || '';
+        let resolvedName = data.fileName || data.file_name;
+        if (!resolvedName && resolvedUrl) {
+          try {
+            resolvedName = decodeURIComponent(resolvedUrl.split('/').pop()?.split('?')[0]?.replace(/^\d+_/, '') || '');
+          } catch {
+            resolvedName = `${data.title || 'cours'}_document`;
+          }
+        }
+        return { 
+          id: doc.id, 
+          ...data,
+          fileUrl: resolvedUrl,
+          fileName: resolvedName
+        };
+      });
       
       // Sort client-side
       coursesData.sort((a: any, b: any) => {
@@ -1016,16 +1032,21 @@ export default function StudentDashboard({ onNavigate }: { onNavigate?: (tab: st
                           </div>
                           <h4 className="text-lg font-black text-gray-900 mb-2">{course.title}</h4>
                           <p className="text-sm text-gray-500 leading-relaxed mb-4">{course.description}</p>
-                          {course.file_url && (
-                            <a 
-                              href={course.file_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 hover:bg-indigo-50 hover:border-indigo-200 transition-all"
-                            >
-                              <FileText size={14} className="text-indigo-600" />
-                              Ouvrir / Télécharger le Support de Cours
-                            </a>
+                          {course.fileUrl && (
+                            <div className="flex items-center gap-2">
+                              <button 
+                                type="button"
+                                onClick={() => downloadCourseFile(course.fileUrl, course.fileName)}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all shadow-sm"
+                                title={`Télécharger ${course.fileName || 'le support de cours'}`}
+                              >
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${getFileTypeBadge(course.fileName).bg} ${getFileTypeBadge(course.fileName).text}`}>
+                                  {getFileTypeBadge(course.fileName).label}
+                                </span>
+                                <span className="truncate max-w-xs">{course.fileName || "Support de cours"}</span>
+                                <Download size={14} className="text-indigo-600 shrink-0" />
+                              </button>
+                            </div>
                           )}
                         </div>
                       ))}
