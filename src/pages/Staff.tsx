@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, firebaseConfig } from '../lib/firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, deleteDoc, addDoc, setDoc } from 'firebase/firestore';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { 
   Users, 
   Search, 
@@ -31,7 +33,11 @@ import {
   Award,
   BookMarked,
   Check,
-  Plus
+  Plus,
+  ChevronDown,
+  Lock,
+  Key,
+  Hash
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -39,6 +45,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEstablishment } from '../contexts/EstablishmentContext';
 import RoleResponsibilities from '../components/RoleResponsibilities';
+import { EDUCATIONAL_SYSTEMS_CONFIG } from '../constants/educationalSystems';
 
 // The 11 specific administrative roles/responsibilities defined by the user
 export const administrativeResponsibilities = [
@@ -155,8 +162,11 @@ export default function Staff() {
     contract_type: 'CDI',
     matricule: '',
     address: '',
+    password: '',
     date_embauche: new Date().toISOString().split('T')[0]
   });
+
+  const [showClassesDropdown, setShowClassesDropdown] = useState(false);
 
   // New Administrative Staff form state
   const [newStaff, setNewStaff] = useState({
@@ -165,11 +175,13 @@ export default function Staff() {
     email: '',
     phone: '',
     gender: 'male',
-    position: 'Secrétaire Générale',
+    role: 'personnel administratif',
+    position: 'Responsable Lycée',
     department: 'Administration Générale',
-    responsibilities: [] as string[],
+    responsibilities: ['responsable_lycee'] as string[],
     matricule: '',
-    address: ''
+    address: '',
+    password: ''
   });
 
   const activeEstId = isSuperAdmin 
@@ -179,7 +191,7 @@ export default function Staff() {
   // Permission check for establishment manager / admin
   const isManager = isSuperAdmin || currentUser?.role === 'admin' || (currentUser?.role === 'personnel administratif' && (currentUser?.position?.toLowerCase().includes('direct') || currentUser?.position?.toLowerCase().includes('provis')));
 
-  // Auto generate teacher matricule
+  // Auto generate teacher and staff matricule
   useEffect(() => {
     if (showAddTeacherModal && !newTeacher.matricule) {
       const year = new Date().getFullYear();
@@ -187,6 +199,14 @@ export default function Staff() {
       setNewTeacher(prev => ({ ...prev, matricule: `ENS-${year}-${rand}` }));
     }
   }, [showAddTeacherModal]);
+
+  useEffect(() => {
+    if (showAddStaffModal && !newStaff.matricule) {
+      const year = new Date().getFullYear();
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      setNewStaff(prev => ({ ...prev, matricule: `ADM-${year}-${rand}` }));
+    }
+  }, [showAddStaffModal]);
 
   // Load staff & teachers for this establishment
   useEffect(() => {
@@ -326,11 +346,29 @@ export default function Staff() {
     }
 
     setIsSubmitting(true);
+    const cleanEmail = newTeacher.email.trim().toLowerCase();
+    const finalPassword = newTeacher.password.trim() || 'Pass123456!';
+    let finalUid = `ens_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
     try {
+      // Create active Firebase Auth account via secondary app to preserve current session
+      try {
+        const secondaryApp = getApps().find(app => app.name === 'SecondaryStaffApp') || initializeApp(firebaseConfig, 'SecondaryStaffApp');
+        const secondaryAuth = getAuth(secondaryApp);
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, finalPassword);
+        finalUid = cred.user.uid;
+        await signOut(secondaryAuth);
+      } catch (authErr: any) {
+        console.warn("Firebase Auth user creation note (might already exist or offline fallback):", authErr.message || authErr);
+      }
+
+      const teacherMatricule = newTeacher.matricule.trim() || `ENS-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
       const teacherPayload = {
+        id: finalUid,
+        uid: finalUid,
         nom: newTeacher.nom.trim(),
         prenom: newTeacher.prenom.trim(),
-        email: newTeacher.email.trim().toLowerCase(),
+        email: cleanEmail,
         phone: newTeacher.phone.trim(),
         contact: newTeacher.phone.trim(),
         gender: newTeacher.gender,
@@ -344,18 +382,22 @@ export default function Staff() {
         diploma: newTeacher.diploma,
         experience_years: Number(newTeacher.experience_years) || 0,
         contract_type: newTeacher.contract_type,
-        matricule: newTeacher.matricule.trim() || `ENS-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        matricule: teacherMatricule,
         address: newTeacher.address.trim(),
         date_embauche: newTeacher.date_embauche,
         etablissement: activeEstId,
         status: 'active',
-        created_at: new Date().toISOString()
+        statut: 'actif',
+        emailVerified: true,
+        created_at: new Date().toISOString(),
+        date_creation: new Date().toISOString()
       };
 
-      await addDoc(collection(db, 'users'), teacherPayload);
-      notifySuccess(`Enseignant ${newTeacher.prenom} ${newTeacher.nom} (${newTeacher.statut_enseignant.toUpperCase()}) enregistré avec succès !`);
+      await setDoc(doc(db, 'users', finalUid), teacherPayload, { merge: true });
+      notifySuccess(`Enseignant ${newTeacher.prenom} ${newTeacher.nom} (${newTeacher.statut_enseignant.toUpperCase()}) enregistré avec compte actif !`);
       
       setShowAddTeacherModal(false);
+      setShowClassesDropdown(false);
       setNewTeacher({
         nom: '',
         prenom: '',
@@ -371,6 +413,7 @@ export default function Staff() {
         contract_type: 'CDI',
         matricule: '',
         address: '',
+        password: '',
         date_embauche: new Date().toISOString().split('T')[0]
       });
     } catch (err) {
@@ -390,27 +433,55 @@ export default function Staff() {
     }
 
     setIsSubmitting(true);
+    const cleanEmail = newStaff.email.trim().toLowerCase();
+    const finalPassword = newStaff.password.trim() || 'Pass123456!';
+    let finalUid = `staff_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
     try {
+      // Create active Firebase Auth account via secondary app to preserve current session
+      try {
+        const secondaryApp = getApps().find(app => app.name === 'SecondaryStaffApp') || initializeApp(firebaseConfig, 'SecondaryStaffApp');
+        const secondaryAuth = getAuth(secondaryApp);
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, finalPassword);
+        finalUid = cred.user.uid;
+        await signOut(secondaryAuth);
+      } catch (authErr: any) {
+        console.warn("Firebase Auth user creation note for staff (might already exist or offline fallback):", authErr.message || authErr);
+      }
+
+      const assignedRole = newStaff.role?.trim() || 'personnel administratif';
+      const staffMatricule = newStaff.matricule.trim() || `ADM-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      
+      const computedResponsibilities = newStaff.position === 'Responsable Lycée'
+        ? Array.from(new Set([...newStaff.responsibilities, 'responsable_lycee']))
+        : newStaff.responsibilities;
+
       const staffPayload = {
+        id: finalUid,
+        uid: finalUid,
         nom: newStaff.nom.trim(),
         prenom: newStaff.prenom.trim(),
-        email: newStaff.email.trim().toLowerCase(),
+        email: cleanEmail,
         phone: newStaff.phone.trim(),
         contact: newStaff.phone.trim(),
         gender: newStaff.gender,
-        role: 'personnel administratif',
+        role: assignedRole,
         position: newStaff.position,
+        preciseRole: newStaff.position,
         department: newStaff.department,
-        responsibilities: newStaff.responsibilities,
-        matricule: newStaff.matricule.trim() || `ADM-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        responsibilities: computedResponsibilities,
+        matricule: staffMatricule,
         address: newStaff.address.trim(),
         etablissement: activeEstId,
         status: 'active',
-        created_at: new Date().toISOString()
+        statut: 'actif',
+        emailVerified: true,
+        created_at: new Date().toISOString(),
+        date_creation: new Date().toISOString()
       };
 
-      await addDoc(collection(db, 'users'), staffPayload);
-      notifySuccess(`Membre administratif ${newStaff.prenom} ${newStaff.nom} enregistré avec succès !`);
+      await setDoc(doc(db, 'users', finalUid), staffPayload, { merge: true });
+      notifySuccess(`Personnel administratif ${newStaff.prenom} ${newStaff.nom} (${newStaff.position}) enregistré avec compte actif !`);
       setShowAddStaffModal(false);
       setNewStaff({
         nom: '',
@@ -418,11 +489,13 @@ export default function Staff() {
         email: '',
         phone: '',
         gender: 'male',
-        position: 'Secrétaire Générale',
+        role: 'personnel administratif',
+        position: 'Responsable Lycée',
         department: 'Administration Générale',
-        responsibilities: [],
+        responsibilities: ['responsable_lycee'],
         matricule: '',
-        address: ''
+        address: '',
+        password: ''
       });
     } catch (err) {
       console.error("Error creating staff:", err);
@@ -851,20 +924,21 @@ export default function Staff() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full table-fixed min-w-[700px]">
+            <table className="w-full table-fixed min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-700/50 text-left">
                   <th className="w-1/3 px-6 py-4 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Membre Administratif</th>
+                  <th className="w-32 px-4 py-4 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Matricule</th>
                   <th className="w-1/4 px-6 py-4 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Contact</th>
                   <th className="w-1/4 px-6 py-4 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Poste / Département</th>
                   <th className="w-24 px-6 py-4 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Statut</th>
-                  <th className="w-32 px-6 py-4 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                  <th className="w-28 px-6 py-4 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-20 text-center text-gray-500">
+                    <td colSpan={6} className="px-6 py-20 text-center text-gray-500">
                       <div className="flex flex-col items-center gap-3">
                         <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                         <p className="text-sm font-medium">Chargement du personnel...</p>
@@ -873,7 +947,7 @@ export default function Staff() {
                   </tr>
                 ) : filteredAdminStaff.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-20 text-center text-gray-500">
+                    <td colSpan={6} className="px-6 py-20 text-center text-gray-500">
                       <div className="flex flex-col items-center gap-3">
                         <Users size={40} className="text-gray-300" />
                         <p className="text-sm font-medium">Aucun membre du personnel administratif trouvé</p>
@@ -904,6 +978,15 @@ export default function Staff() {
                             </div>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        {member.matricule ? (
+                          <span className="inline-block px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700/60 font-mono text-xs font-bold text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-600">
+                            {member.matricule}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs font-mono">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="space-y-1 min-w-0 text-xs">
@@ -1077,6 +1160,19 @@ export default function Staff() {
                       />
                     </div>
                     <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Mot de passe de connexion</label>
+                      <input
+                        type="password"
+                        placeholder="Défaut: Pass123456!"
+                        value={newTeacher.password}
+                        onChange={(e) => setNewTeacher({ ...newTeacher, password: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
                       <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Téléphone / WhatsApp</label>
                       <input
                         type="tel"
@@ -1085,6 +1181,18 @@ export default function Staff() {
                         onChange={(e) => setNewTeacher({ ...newTeacher, phone: e.target.value })}
                         className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Genre</label>
+                      <select
+                        value={newTeacher.gender}
+                        onChange={(e) => setNewTeacher({ ...newTeacher, gender: e.target.value })}
+                        className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="male">Masculin</option>
+                        <option value="female">Féminin</option>
+                        <option value="other">Autre</option>
+                      </select>
                     </div>
                   </div>
 
@@ -1099,15 +1207,15 @@ export default function Staff() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Genre</label>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Statut Contractuel</label>
                       <select
-                        value={newTeacher.gender}
-                        onChange={(e) => setNewTeacher({ ...newTeacher, gender: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                        value={newTeacher.statut_enseignant}
+                        onChange={(e) => setNewTeacher({ ...newTeacher, statut_enseignant: e.target.value as TeacherStatusType })}
+                        className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-indigo-600 dark:text-indigo-400 outline-none focus:ring-2 focus:ring-indigo-500"
                       >
-                        <option value="male">Masculin</option>
-                        <option value="female">Féminin</option>
-                        <option value="other">Autre</option>
+                        <option value="permanent">Permanent (Titulaire)</option>
+                        <option value="prestataire">Prestataire / Vacataire</option>
+                        <option value="stagiaire">Stagiaire</option>
                       </select>
                     </div>
                   </div>
@@ -1163,44 +1271,126 @@ export default function Staff() {
                     </div>
                   </div>
 
-                  {/* Classes attribution */}
-                  {classesList.length > 0 && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                        Classes Attribuées (Cochez les classes)
+                  {/* Classes attribution with Dropdown Menu */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-black uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                        Classes Attribuées (Menu Déroulant à Cocher)
                       </label>
-                      <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto p-3 bg-gray-50 dark:bg-gray-900/40 rounded-2xl border border-gray-150 dark:border-gray-700">
-                        {classesList.map(c => {
-                          const cName = c.name || c.id;
-                          const isChecked = newTeacher.classes.includes(cName);
-                          return (
-                            <label
-                              key={c.id}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer transition-all flex items-center gap-1.5 ${
-                                isChecked
-                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setNewTeacher({ ...newTeacher, classes: [...newTeacher.classes, cName] });
-                                  } else {
-                                    setNewTeacher({ ...newTeacher, classes: newTeacher.classes.filter(cn => cn !== cName) });
-                                  }
-                                }}
-                                className="hidden"
-                              />
-                              {cName}
-                            </label>
-                          );
-                        })}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentSysName = currentEstablishment?.systemeScolaire || 'Système Français';
+                            const defaultSysClasses = EDUCATIONAL_SYSTEMS_CONFIG[currentSysName]?.defaultClasses || [
+                              '6ème A', '6ème B', '5ème A', '5ème B', '4ème A', '4ème B', '3ème A', '3ème B',
+                              '2nde A', '2nde C', '1ère A', '1ère D', 'Tle A', 'Tle D'
+                            ];
+                            const allNames = Array.from(new Set([
+                              ...classesList.map(c => c.name || c.nom || c.id),
+                              ...defaultSysClasses
+                            ])).filter(Boolean);
+                            setNewTeacher({ ...newTeacher, classes: allNames });
+                          }}
+                          className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                        >
+                          Tout cocher
+                        </button>
+                        <span className="text-gray-300 dark:text-gray-600">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setNewTeacher({ ...newTeacher, classes: [] })}
+                          className="text-[10px] font-bold text-gray-400 hover:text-red-500 hover:underline cursor-pointer"
+                        >
+                          Tout décocher
+                        </button>
                       </div>
                     </div>
-                  )}
+
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowClassesDropdown(!showClassesDropdown)}
+                        className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm flex items-center justify-between text-left focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                      >
+                        <span className="truncate text-gray-700 dark:text-gray-200 font-medium">
+                          {newTeacher.classes.length === 0
+                            ? "Sélectionner / cocher les classes attribuées..."
+                            : `${newTeacher.classes.length} classe(s) cochée(s) : ${newTeacher.classes.slice(0, 3).join(', ')}${newTeacher.classes.length > 3 ? '...' : ''}`}
+                        </span>
+                        <ChevronDown size={18} className={`text-gray-400 transition-transform ${showClassesDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {/* Dropdown Options */}
+                      {showClassesDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl p-3 max-h-56 overflow-y-auto space-y-1">
+                          {(() => {
+                            const currentSysName = currentEstablishment?.systemeScolaire || 'Système Français';
+                            const defaultSysClasses = EDUCATIONAL_SYSTEMS_CONFIG[currentSysName]?.defaultClasses || [
+                              '6ème A', '6ème B', '5ème A', '5ème B', '4ème A', '4ème B', '3ème A', '3ème B',
+                              '2nde A', '2nde C', '1ère A', '1ère D', 'Tle A', 'Tle D'
+                            ];
+                            const allNames = Array.from(new Set([
+                              ...classesList.map(c => c.name || c.nom || c.id),
+                              ...defaultSysClasses
+                            ])).filter(Boolean);
+
+                            return allNames.map(cName => {
+                              const isChecked = newTeacher.classes.includes(cName);
+                              return (
+                                <label
+                                  key={cName}
+                                  className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
+                                    isChecked
+                                      ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300'
+                                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setNewTeacher({ ...newTeacher, classes: [...newTeacher.classes, cName] });
+                                        } else {
+                                          setNewTeacher({ ...newTeacher, classes: newTeacher.classes.filter(cn => cn !== cName) });
+                                        }
+                                      }}
+                                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                    />
+                                    <span>{cName}</span>
+                                  </div>
+                                  {isChecked && <Check size={14} className="text-indigo-600 dark:text-indigo-400" />}
+                                </label>
+                              );
+                            });
+                          })()}
+                        </div>
+                      )}
+
+                      {/* Selected tags */}
+                      {newTeacher.classes.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {newTeacher.classes.map(cName => (
+                            <span
+                              key={cName}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 text-xs font-bold"
+                            >
+                              {cName}
+                              <button
+                                type="button"
+                                onClick={() => setNewTeacher({ ...newTeacher, classes: newTeacher.classes.filter(c => c !== cName) })}
+                                className="hover:text-red-500 cursor-pointer"
+                              >
+                                &times;
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -1316,6 +1506,29 @@ export default function Staff() {
                     />
                   </div>
                   <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Mot de passe de connexion</label>
+                    <input
+                      type="password"
+                      placeholder="Défaut: Pass123456!"
+                      value={newStaff.password}
+                      onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Matricule Administratif</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: ADM-2026-1234"
+                      value={newStaff.matricule}
+                      onChange={(e) => setNewStaff({ ...newStaff, matricule: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Téléphone</label>
                     <input
                       type="tel"
@@ -1335,6 +1548,7 @@ export default function Staff() {
                       onChange={(e) => setNewStaff({ ...newStaff, position: e.target.value })}
                       className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                     >
+                      <option value="Responsable Lycée">Responsable Lycée</option>
                       <option value="Secrétaire Générale">Secrétaire Générale</option>
                       <option value="Gestionnaire Comptable">Gestionnaire Comptable</option>
                       <option value="Surveillant Général">Surveillant Général</option>
@@ -1346,6 +1560,21 @@ export default function Staff() {
                     </select>
                   </div>
                   <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Rôle Affecté</label>
+                    <select
+                      value={newStaff.role}
+                      onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-indigo-600 dark:text-indigo-400 outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="personnel administratif">Personnel Administratif</option>
+                      <option value="responsable_lycee">Responsable Lycée</option>
+                      <option value="admin">Administrateur</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Département</label>
                     <input
                       type="text"
@@ -1354,6 +1583,18 @@ export default function Staff() {
                       onChange={(e) => setNewStaff({ ...newStaff, department: e.target.value })}
                       className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Genre</label>
+                    <select
+                      value={newStaff.gender}
+                      onChange={(e) => setNewStaff({ ...newStaff, gender: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="male">Masculin</option>
+                      <option value="female">Féminin</option>
+                      <option value="other">Autre</option>
+                    </select>
                   </div>
                 </div>
 
@@ -1479,3 +1720,4 @@ export default function Staff() {
     </div>
   );
 }
+
