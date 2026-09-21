@@ -34,6 +34,16 @@ export interface SystemConfig {
   };
 }
 
+export const HIGHER_EDUCATION_DIPLOMAS: string[] = [
+  'Licence',
+  'Master',
+  'Doctorat',
+  'CPAS',
+  'CAPES',
+  'Agrégation',
+  'BTS / DUT'
+];
+
 export const EDUCATIONAL_SYSTEMS_CONFIG: Record<string, SystemConfig> = {
   'Système Français': {
     name: 'Système Français',
@@ -49,6 +59,7 @@ export const EDUCATIONAL_SYSTEMS_CONFIG: Record<string, SystemConfig> = {
       'Terminale (Baccalauréat)'
     ],
     diplomas: [
+      ...HIGHER_EDUCATION_DIPLOMAS,
       'DNB - Diplôme National du Brevet',
       'Baccalauréat Général / Technologique',
       'CAP / Bac Professionnel'
@@ -100,6 +111,7 @@ export const EDUCATIONAL_SYSTEMS_CONFIG: Record<string, SystemConfig> = {
       'Collégial / CÉGEP (Préuniversitaire & Technique)'
     ],
     diplomas: [
+      ...HIGHER_EDUCATION_DIPLOMAS,
       'DES - Diplôme d\'Études Secondaires (Québec)',
       'DEC - Diplôme d\'Études Collégiales',
       'SSD - Secondary School Diploma (Canada)'
@@ -151,6 +163,7 @@ export const EDUCATIONAL_SYSTEMS_CONFIG: Record<string, SystemConfig> = {
       'Formations Professionnelles / Alternance'
     ],
     diplomas: [
+      ...HIGHER_EDUCATION_DIPLOMAS,
       'CEPE - Certificat d\'Études Primaires Élémentaires (Gabon)',
       'BEPC - Brevet d\'Études du Premier Cycle (Gabon)',
       'Baccalauréat Gabonais (Séries A1, A2, B, C, D, SI, STT)',
@@ -200,6 +213,7 @@ export const EDUCATIONAL_SYSTEMS_CONFIG: Record<string, SystemConfig> = {
       'Secondaire Technique & Industriel'
     ],
     diplomas: [
+      ...HIGHER_EDUCATION_DIPLOMAS,
       'CEPE - Certificat d\'Études Primaires Élémentaires',
       'BEPC - Brevet d\'Études du Premier Cycle',
       'Baccalauréat Gabonais Officiel (Direction Générale des Examens)'
@@ -245,6 +259,7 @@ export const EDUCATIONAL_SYSTEMS_CONFIG: Record<string, SystemConfig> = {
       'Lycée (2nde A/C, 1ère A/C/D, Tle A/C/D)'
     ],
     diplomas: [
+      ...HIGHER_EDUCATION_DIPLOMAS,
       'CEPE - Certificat d\'Études Primaires Élémentaires (CI)',
       'BEPC - Brevet d\'Études du Premier Cycle (CI)',
       'Baccalauréat Ivoirien (Séries A1, A2, C, D, E, F, G)'
@@ -290,6 +305,7 @@ export const EDUCATIONAL_SYSTEMS_CONFIG: Record<string, SystemConfig> = {
       'Secondaire 2nd Cycle (2nde C/A, 1ère C/D/A, Tle C/D/A)'
     ],
     diplomas: [
+      ...HIGHER_EDUCATION_DIPLOMAS,
       'CEP - Certificat d\'Études Primaires (Cameroun)',
       'BEPC - Brevet d\'Études du Premier Cycle',
       'Probatoire (Classe de Première)',
@@ -338,6 +354,7 @@ export const EDUCATIONAL_SYSTEMS_CONFIG: Record<string, SystemConfig> = {
       'Grade 11 to 12 (IB Diploma / AP / A-Levels)'
     ],
     diplomas: [
+      ...HIGHER_EDUCATION_DIPLOMAS,
       'IB Diploma Programme (International Baccalaureate)',
       'Cambridge IGCSE & A-Levels',
       'US High School Diploma with AP (Advanced Placement)'
