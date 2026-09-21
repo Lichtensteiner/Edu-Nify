@@ -4,6 +4,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { collection, query, where, getDocs, doc, getDoc, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { generateReceiptPDF } from '../utils/pdfGenerator';
+import { downloadCourseFile } from '../utils/courseFileManager';
 import { 
   Users, 
   Plus, 
@@ -207,7 +208,24 @@ export default function ParentDashboard({ onNavigate, initialTab }: { onNavigate
       ? query(collection(db, 'resources'), where('class_name', '==', selectedChild.classe))
       : query(collection(db, 'resources'));
     const unsubscribeCourses = onSnapshot(coursesQuery, (snapshot) => {
-      const coursesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const coursesData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const resolvedUrl = data.fileUrl || data.url || data.file_url || '';
+        let resolvedName = data.fileName || data.file_name;
+        if (!resolvedName && resolvedUrl) {
+          try {
+            resolvedName = decodeURIComponent(resolvedUrl.split('/').pop()?.split('?')[0]?.replace(/^\d+_/, '') || '');
+          } catch {
+            resolvedName = `${data.title || 'cours'}_document`;
+          }
+        }
+        return { 
+          id: doc.id, 
+          ...data,
+          fileUrl: resolvedUrl,
+          fileName: resolvedName
+        };
+      });
       coursesData.sort((a: any, b: any) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
       setChildCourses(coursesData);
     });
@@ -1069,16 +1087,16 @@ export default function ParentDashboard({ onNavigate, initialTab }: { onNavigate
                               </div>
                               <h4 className="text-lg font-black text-gray-900 dark:text-white mb-2">{course.title}</h4>
                               <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed mb-4">{course.description}</p>
-                              {course.file_url && (
-                                <a 
-                                  href={course.file_url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
-                                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:border-indigo-200 transition-colors"
+                              {course.fileUrl && (
+                                <button 
+                                  type="button"
+                                  onClick={() => downloadCourseFile(course.fileUrl, course.fileName)}
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:border-indigo-200 transition-colors shadow-sm"
+                                  title={`Télécharger ${course.fileName || 'le support de cours'}`}
                                 >
-                                  <FileText size={14} className="text-indigo-600" />
-                                  Télécharger le cours PDF / Support
-                                </a>
+                                  <Download size={14} className="text-indigo-600" />
+                                  <span>Télécharger le cours ({course.fileName || 'Support joint'})</span>
+                                </button>
                               )}
                             </div>
                           ))}
