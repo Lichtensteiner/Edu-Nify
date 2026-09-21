@@ -110,13 +110,16 @@ export default function Users() {
       : query(collection(db, 'users'), where('etablissement', '==', activeEstId));
 
     const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
-      const usersData = snapshot.docs.map(doc => {
+      let usersData = snapshot.docs.map(doc => {
         const u = { id: doc.id, ...doc.data() } as any;
         if (!u.photo) {
           u.photo = getUserAvatarUrl(u);
         }
         return u;
       });
+      if (!isSuperAdmin) {
+        usersData = usersData.filter(u => (u.etablissement || 'EDU-001') === activeEstId);
+      }
       setUsers(usersData);
       setLoading(false);
     }, (err) => {
@@ -125,27 +128,34 @@ export default function Users() {
     });
 
     const unsubscribeHouses = onSnapshot(collection(db, 'houses'), (snapshot) => {
-      const housesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let housesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (!isSuperAdmin) {
+        housesData = housesData.filter((h: any) => (h.etablissement || 'EDU-001') === activeEstId);
+      }
       setHouses(housesData);
     });
 
     const unsubscribeClasses = onSnapshot(collection(db, 'classes'), (snapshot) => {
-      const classesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let classesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      classesData = classesData.filter((c: any) => (c.etablissement || 'EDU-001') === activeEstId);
       setClasses(classesData);
     });
 
     const unsubscribeSubjects = onSnapshot(collection(db, 'subjects'), (snapshot) => {
-      const subjectsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let subjectsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      subjectsData = subjectsData.filter((s: any) => (s.etablissement || 'EDU-001') === activeEstId);
       setSubjects(subjectsData.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '')));
     });
 
     const unsubscribeFeeConfigs = onSnapshot(collection(db, 'fee_configurations'), (snapshot) => {
-      const configsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let configsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      configsData = configsData.filter((f: any) => (f.etablissement || 'EDU-001') === activeEstId);
       setFeeConfigs(configsData);
     });
 
     const unsubscribePayments = onSnapshot(collection(db, 'payments'), (snapshot) => {
-      const paymentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let paymentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      paymentsData = paymentsData.filter((p: any) => (p.etablissement || 'EDU-001') === activeEstId);
       setPayments(paymentsData);
     });
 
@@ -157,7 +167,7 @@ export default function Users() {
       unsubscribeFeeConfigs();
       unsubscribePayments();
     };
-  }, []);
+  }, [currentEstablishment, currentUser, isSuperAdmin]);
 
   useEffect(() => {
     if (!viewUser || !isFirebaseConfigured) {
@@ -2248,10 +2258,23 @@ export default function Users() {
                             onChange={(e) => setEditUser({...editUser, diploma: e.target.value})}
                             className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm font-semibold text-gray-800 dark:text-gray-100"
                           >
-                            <option value="">Sélectionner un diplôme ({currentEstablishment?.systemeScolaire || 'Système Français'})</option>
-                            {systemConfig.diplomas.map(dip => (
-                              <option key={dip} value={dip}>{dip}</option>
-                            ))}
+                            <option value="">Sélectionner un diplôme</option>
+                            <optgroup label="Diplômes d'État & Universitaires">
+                              <option value="Licence">Licence</option>
+                              <option value="Master">Master</option>
+                              <option value="Doctorat">Doctorat</option>
+                              <option value="CPAS">CPAS (Certificat Pédagogique d'Aptitude au Secondaire)</option>
+                              <option value="CAPES">CAPES</option>
+                              <option value="Agrégation">Agrégation</option>
+                              <option value="BTS / DUT">BTS / DUT</option>
+                            </optgroup>
+                            <optgroup label={`Cursus scolaire (${currentEstablishment?.systemeScolaire || 'Système Français'})`}>
+                              {systemConfig.diplomas
+                                .filter(dip => !['Licence', 'Master', 'Doctorat', 'CPAS', 'CAPES', 'Agrégation', 'BTS / DUT'].includes(dip))
+                                .map(dip => (
+                                  <option key={dip} value={dip}>{dip}</option>
+                                ))}
+                            </optgroup>
                             <option value="Autre / Équivalent">Autre / Équivalent</option>
                           </select>
                         </div>
@@ -3126,10 +3149,23 @@ export default function Users() {
                               onChange={(e) => setNewUser({...newUser, diploma: e.target.value})}
                               className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm font-semibold text-gray-800 dark:text-gray-100"
                             >
-                              <option value="">Sélectionner un diplôme ({currentEstablishment?.systemeScolaire || 'Système Français'})</option>
-                              {systemConfig.diplomas.map(dip => (
-                                <option key={dip} value={dip}>{dip}</option>
-                              ))}
+                              <option value="">Sélectionner un diplôme</option>
+                              <optgroup label="Diplômes d'État & Universitaires">
+                                <option value="Licence">Licence</option>
+                                <option value="Master">Master</option>
+                                <option value="Doctorat">Doctorat</option>
+                                <option value="CPAS">CPAS (Certificat Pédagogique d'Aptitude au Secondaire)</option>
+                                <option value="CAPES">CAPES</option>
+                                <option value="Agrégation">Agrégation</option>
+                                <option value="BTS / DUT">BTS / DUT</option>
+                              </optgroup>
+                              <optgroup label={`Cursus scolaire (${currentEstablishment?.systemeScolaire || 'Système Français'})`}>
+                                {systemConfig.diplomas
+                                  .filter(dip => !['Licence', 'Master', 'Doctorat', 'CPAS', 'CAPES', 'Agrégation', 'BTS / DUT'].includes(dip))
+                                  .map(dip => (
+                                    <option key={dip} value={dip}>{dip}</option>
+                                  ))}
+                              </optgroup>
                               <option value="Autre / Équivalent">Autre / Équivalent</option>
                             </select>
                           </div>
