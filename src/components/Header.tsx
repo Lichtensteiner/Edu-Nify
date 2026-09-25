@@ -16,6 +16,7 @@ interface Notification {
   timestamp: string;
   type?: 'info' | 'warning' | 'success';
   targetTab?: string;
+  etablissement?: string;
 }
 
 interface HeaderProps {
@@ -88,6 +89,8 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
     return () => clearInterval(timer);
   }, []);
 
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
+
   useEffect(() => {
     if (!isFirebaseConfigured || !currentUser) return;
 
@@ -97,11 +100,14 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
     );
 
     const unsubscribe = onSnapshot(q, (snap) => {
-      const notifs = snap.docs.map(doc => ({
+      const allNotifs = snap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Notification));
       
+      // Strict establishment isolation: users cannot see notifications from any other establishment
+      const notifs = allNotifs.filter(n => (n.etablissement || currentUser.etablissement || 'EDU-001') === activeEstId);
+
       // Sort manually to avoid requiring a composite index in Firestore
       notifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       
@@ -109,10 +115,13 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
       snap.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const notif = { id: change.doc.id, ...change.doc.data() } as Notification;
-          const notifTime = new Date(notif.timestamp);
-          if (!notif.read && notifTime.getTime() > componentMountTimeRef.current.getTime()) {
-            const mappedType: any = notif.type === 'warning' ? 'info' : (notif.type || 'info');
-            notify(mappedType, notif.message, notif.title || 'Nouvelle Alerte');
+          const notifEst = notif.etablissement || currentUser.etablissement || 'EDU-001';
+          if (notifEst === activeEstId) {
+            const notifTime = new Date(notif.timestamp);
+            if (!notif.read && notifTime.getTime() > componentMountTimeRef.current.getTime()) {
+              const mappedType: any = notif.type === 'warning' ? 'info' : (notif.type || 'info');
+              notify(mappedType, notif.message, notif.title || 'Nouvelle Alerte');
+            }
           }
         }
       });
@@ -123,7 +132,7 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, activeEstId]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -156,13 +165,18 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
         
         const results = usersSnap.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as any))
-          .filter(user => 
-            (user.nom?.toLowerCase() || '').includes(queryLower) ||
-            (user.prenom?.toLowerCase() || '').includes(queryLower) ||
-            (user.email?.toLowerCase() || '').includes(queryLower) ||
-            (user.matricule?.toLowerCase() || '').includes(queryLower) ||
-            (user.classe?.toLowerCase() || '').includes(queryLower)
-          )
+          .filter(user => {
+            // Isolate search results to active establishment
+            const userEst = user.etablissement || 'EDU-001';
+            if (userEst !== activeEstId) return false;
+            return (
+              (user.nom?.toLowerCase() || '').includes(queryLower) ||
+              (user.prenom?.toLowerCase() || '').includes(queryLower) ||
+              (user.email?.toLowerCase() || '').includes(queryLower) ||
+              (user.matricule?.toLowerCase() || '').includes(queryLower) ||
+              (user.classe?.toLowerCase() || '').includes(queryLower)
+            );
+          })
           .slice(0, 5); // Limit to 5 results
           
         setSearchResults(results);
@@ -174,7 +188,7 @@ export default function Header({ activeTab, setActiveTab, onMenuClick }: HeaderP
 
     const debounceTimer = setTimeout(fetchResults, 300);
     return () => clearTimeout(debounceTimer);
-  }, [searchQuery, currentUser]);
+  }, [searchQuery, currentUser, activeEstId]);
 
   const handleNotificationClick = (notif: Notification) => {
     // If there is long content, always show the modal first
