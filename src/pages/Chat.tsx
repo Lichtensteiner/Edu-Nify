@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 import { collection, query, where, getDocs, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc, increment, setDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../lib/firebase';
@@ -30,8 +31,10 @@ interface ChatProps {
 
 export default function Chat({ conversationId, onBack }: ChatProps) {
   const { currentUser } = useAuth();
+  const { currentEstablishment, isSuperAdmin } = useEstablishment();
   const { t } = useLanguage();
   const { notifySuccess, notifyError, notifyDelete } = useNotification();
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -140,6 +143,12 @@ export default function Chat({ conversationId, onBack }: ChatProps) {
     const unsubscribeConv = onSnapshot(doc(db, 'conversations', conversationId), async (convDoc) => {
       if (convDoc.exists()) {
         const data = convDoc.data();
+        const convEst = data.etablissement || 'EDU-001';
+        if (convEst !== activeEstId && !isSuperAdmin) {
+          notifyError("Accès restreint : cette conversation appartient à un autre établissement.");
+          onBack();
+          return;
+        }
         setConversationData(data);
         
         // Reset unread count if it's greater than 0
@@ -498,6 +507,8 @@ export default function Chat({ conversationId, onBack }: ChatProps) {
         }
       }
 
+      const convEst = conversationData?.etablissement || activeEstId;
+
       await addDoc(collection(db, `conversations/${conversationId}/messages`), {
         senderId: currentUser.id,
         text: newMessage.trim(),
@@ -505,7 +516,8 @@ export default function Chat({ conversationId, onBack }: ChatProps) {
         mediaType: finalMediaType,
         createdAt: serverTimestamp(),
         scheduledFor: scheduledTimestamp,
-        isDelivered: !scheduledTimestamp
+        isDelivered: !scheduledTimestamp,
+        etablissement: convEst
       });
       
       if (!scheduledTimestamp) {
@@ -537,7 +549,7 @@ export default function Chat({ conversationId, onBack }: ChatProps) {
 
         await setDoc(doc(db, 'conversations', conversationId), updateData, { merge: true });
         
-        // Notify other participants
+        // Notify other participants within the same establishment
         if (conversationData && conversationData.participants) {
           const senderName = currentUser.prenom || currentUser.nom ? `${currentUser.prenom || ''} ${currentUser.nom || ''}`.trim() : currentUser.email?.split('@')[0] || t('user');
           
@@ -548,7 +560,8 @@ export default function Chat({ conversationId, onBack }: ChatProps) {
               title: conversationData.isGroup ? `${t('new_message_in')} ${conversationData.groupName}` : `${t('new_message_from')} ${senderName}`,
               message: lastMsgText,
               type: 'info',
-              targetTab: 'messaging'
+              targetTab: 'messaging',
+              etablissement: convEst
             }));
           
           await Promise.all(notificationPromises);
