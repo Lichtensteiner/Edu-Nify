@@ -501,7 +501,9 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
     const unsubNotifications = onSnapshot(
       query(collection(db, 'notifications'), where('user_id', '==', currentUser.id)),
       (snapshot) => {
-        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        const list = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as any))
+          .filter(n => (n.etablissement || currentUser.etablissement || 'EDU-001') === activeEstId);
         list.sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
         setNotificationsList(list);
       },
