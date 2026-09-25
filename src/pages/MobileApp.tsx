@@ -265,6 +265,7 @@ export default function MobileApp() {
             type: 'attendance',
             message: `Votre enfant ${recognizedUser.prenom} ${recognizedUser.nom} est arrivé à l'école à ${timeString} (${status}).`,
             timestamp: now.toISOString(),
+            etablissement: recognizedUser.etablissement || 'EDU-001',
             status: 'sent'
           });
         }
