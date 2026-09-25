@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 import { Sparkles, Upload, Send, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, FileText, X, BookOpen, ListChecks, HelpCircle, FileSearch, Copy, Terminal, Trash2, ChevronRight, Search } from 'lucide-react';
 import { createNotification } from '../services/NotificationService';
 import { collection, query, getDocs, where, addDoc, serverTimestamp, onSnapshot, orderBy, deleteDoc, doc } from 'firebase/firestore';
@@ -16,6 +17,8 @@ interface AIAssistantProps {
 export default function AIAssistant({ onNavigate }: AIAssistantProps) {
   const { t, language } = useLanguage();
   const { currentUser } = useAuth();
+  const { currentEstablishment } = useEstablishment();
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
   const { notifySuccess, notifyError, notifyUpdate, notifyAdd } = useNotification();
   const [activeTab, setActiveTab] = useState<'grading' | 'preparations' | 'prompts' | 'my_preps'>('grading');
 
@@ -349,7 +352,8 @@ export default function AIAssistant({ onNavigate }: AIAssistantProps) {
           message: `Votre enseignant ${currentUser.prenom || ''} ${currentUser.nom || ''} a publié une nouvelle ressource (${prepType === "lesson_plan" ? "Plan de cours" : prepType === "exercises_list" ? "Liste d'exercices" : prepType === "quiz_mcq" ? "Quiz / QCM" : "Fiche de synthèse"}) en ${prepSubject}.`,
           content: generatedPrep,
           type: 'info',
-          targetTab: 'student_dashboard'
+          targetTab: 'student_dashboard',
+          etablissement: activeEstId
         });
       });
       await Promise.all(promises);
@@ -379,7 +383,8 @@ export default function AIAssistant({ onNavigate }: AIAssistantProps) {
         message: t('ai_feedback_shared_msg').replace('{{score}}', suggestedScore || 'N/A'),
         content: aiFeedback,
         type: 'success',
-        targetTab: 'student_dashboard'
+        targetTab: 'student_dashboard',
+        etablissement: activeEstId
       });
       notifySuccess(t('feedback_sent_success'));
       setAiFeedback(null);
