@@ -228,6 +228,7 @@ export default function Classroom({ initialClassName }: ClassroomProps) {
         message: `${pointsValue > 0 ? '+' : ''}${pointsValue} points : ${pointData.reason}`,
         type: pointData.type === 'positive' ? 'success' : 'warning',
         timestamp: new Date().toISOString(),
+        etablissement: selectedStudent.etablissement || currentUser.etablissement || 'EDU-001',
         read: false
       });
 
