@@ -15,9 +15,14 @@ export interface AppNotification {
 
 export const createSurveyNotification = async (notificationData: AppNotification) => {
   try {
+    const estId = notificationData.targetSchoolId && notificationData.targetSchoolId !== 'all'
+      ? notificationData.targetSchoolId
+      : 'EDU-001';
     await addDoc(collection(db, 'notifications'), {
       ...notificationData,
+      etablissement: estId,
       isRead: false,
+      timestamp: new Date().toISOString(),
       createdAt: serverTimestamp()
     });
   } catch (error) {
