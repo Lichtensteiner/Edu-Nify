@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, getDocs, deleteDoc, updateDoc, increment, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { 
@@ -78,7 +79,9 @@ interface ClassDetailsViewProps {
 
 export default function ClassDetailsView({ classId, className, onClose }: ClassDetailsViewProps) {
   const { currentUser } = useAuth();
+  const { currentEstablishment } = useEstablishment();
   const { t, language } = useLanguage();
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
   const [activeTab, setActiveTab] = useState<'classroom' | 'history' | 'messaging' | 'calendar'>('classroom');
   const [students, setStudents] = useState<Student[]>([]);
   const [classTeachers, setClassTeachers] = useState<any[]>([]);
@@ -201,7 +204,11 @@ export default function ClassDetailsView({ classId, className, onClose }: ClassD
     if (currentUser?.role === 'enseignant') {
       const convQuery = query(collection(db, 'conversations'), where('participants', 'array-contains', currentUser.id));
       const unsubscribeConv = onSnapshot(convQuery, (snapshot) => {
-        setConversations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setConversations(
+          snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter((c: any) => (c.etablissement || 'EDU-001') === activeEstId)
+        );
       });
       return () => {
         unsubscribeStudents();
@@ -276,7 +283,7 @@ export default function ClassDetailsView({ classId, className, onClose }: ClassD
     const snapshot = await getDocs(q);
     const existing = snapshot.docs.find(d => {
       const data = d.data();
-      return !data.isGroup && data.participants.includes(studentId);
+      return !data.isGroup && data.participants.includes(studentId) && (data.etablissement || 'EDU-001') === activeEstId;
     });
 
     if (existing) {
@@ -288,6 +295,7 @@ export default function ClassDetailsView({ classId, className, onClose }: ClassD
         lastMessage: '',
         lastMessageTime: serverTimestamp(),
         createdAt: serverTimestamp(),
+        etablissement: activeEstId,
         unreadCounts: {
           [currentUser.id]: 0,
           [studentId]: 0
