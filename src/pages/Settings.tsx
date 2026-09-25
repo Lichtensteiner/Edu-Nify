@@ -478,9 +478,13 @@ export default function Settings() {
           ...doc.data()
         })) as any[];
         
+        // Strict establishment isolation
+        const activeEst = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
+        const filtered = notifs.filter(n => (n.etablissement || currentUser?.etablissement || 'EDU-001') === activeEst);
+
         // Sort by timestamp
-        notifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setNotifications(notifs);
+        filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setNotifications(filtered);
       });
 
       return () => {
@@ -590,7 +594,7 @@ export default function Settings() {
                 <div className="space-y-8">
                   <div>
                     <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t('system_appearance')}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Adaptez l'interface au confort de vos yeux.</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('system_appearance_desc') || "Adaptez l'interface au confort de vos yeux."}</p>
                   </div>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -622,7 +626,7 @@ export default function Settings() {
                   </div>
 
                   <div className="pt-6 border-t border-gray-100 dark:border-gray-700">
-                    <h4 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest mb-4">Langue de l'Interface</h4>
+                    <h4 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest mb-4">{t('interface_language') || "Langue de l'Interface"}</h4>
                     <div className="flex flex-wrap gap-3">
                       {['fr', 'en', 'es', 'zh', 'ja', 'pt'].map((lng) => (
                         <button
