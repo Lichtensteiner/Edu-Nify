@@ -203,6 +203,7 @@ export default function KioskMode({ onExit }: KioskModeProps) {
         type: 'attendance',
         message: `Votre enfant ${user.prenom} ${user.nom} a pointé son ${currentAction} à l'école à ${timeString}.`,
         timestamp: now.toISOString(),
+        etablissement: user.etablissement || 'EDU-001',
         status: 'sent'
       });
     }
