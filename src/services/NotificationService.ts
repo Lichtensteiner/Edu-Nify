@@ -15,17 +15,9 @@ export interface NotificationData {
 
 export const createNotification = async (data: Omit<NotificationData, 'read' | 'timestamp'>) => {
   try {
-    // 1. Create for targeted user
-    await addDoc(collection(db, 'notifications'), {
-      ...data,
-      read: false,
-      timestamp: new Date().toISOString()
-    });
-
-    // 2. Propagate to administrator accounts of the SAME establishment
     const { getDocs, query, where, collection: firestoreCollection, doc: getDocRef, getDoc } = await import('firebase/firestore');
-    
-    // Find target user's establishment if not provided
+
+    // 1. Resolve strict establishment ID
     let userEst = data.etablissement;
     if (!userEst && data.user_id) {
       try {
@@ -37,29 +29,44 @@ export const createNotification = async (data: Omit<NotificationData, 'read' | '
         // fallback
       }
     }
+    const finalEst = userEst || 'EDU-001';
 
-    const q = query(firestoreCollection(db, 'users'), where('role', '==', 'admin'));
-    const adminSnap = await getDocs(q);
-    const promises = adminSnap.docs
-      .filter(adminDoc => {
-        if (adminDoc.id === data.user_id) return false;
-        if (userEst) {
+    // 2. Create notification for targeted user with explicit establishment stamp
+    await addDoc(collection(db, 'notifications'), {
+      ...data,
+      read: false,
+      timestamp: new Date().toISOString(),
+      etablissement: finalEst
+    });
+
+    // 3. ONLY propagate to administrators of the EXACT SAME establishment for administrative / system alerts.
+    // NEVER propagate private chat messages, direct conversations or student grades to admins.
+    const isDirectChatOrPrivate = data.targetTab === 'messaging' ||
+      data.title?.toLowerCase().includes('nouveau message') ||
+      data.title?.toLowerCase().includes('new message');
+
+    if (!isDirectChatOrPrivate) {
+      const q = query(firestoreCollection(db, 'users'), where('role', '==', 'admin'));
+      const adminSnap = await getDocs(q);
+      const promises = adminSnap.docs
+        .filter(adminDoc => {
+          if (adminDoc.id === data.user_id) return false;
+          // STRICT check: admin MUST belong to the EXACT same establishment
           const adminEst = adminDoc.data().etablissement || 'EDU-001';
-          return adminEst === userEst;
-        }
-        return true;
-      })
-      .map(adminDoc => {
-        return addDoc(firestoreCollection(db, 'notifications'), {
-          ...data,
-          user_id: adminDoc.id,
-          title: `[Administration] ${data.title}`,
-          read: false,
-          timestamp: new Date().toISOString(),
-          etablissement: userEst || 'EDU-001'
+          return adminEst === finalEst;
+        })
+        .map(adminDoc => {
+          return addDoc(firestoreCollection(db, 'notifications'), {
+            ...data,
+            user_id: adminDoc.id,
+            title: `[Administration] ${data.title}`,
+            read: false,
+            timestamp: new Date().toISOString(),
+            etablissement: finalEst
+          });
         });
-      });
-    await Promise.all(promises);
+      await Promise.all(promises);
+    }
   } catch (error) {
     console.error("Error creating notification in service:", error);
   }
@@ -69,18 +76,21 @@ export const notifyAllUsers = async (title: string, message: string, type: 'info
   try {
     const { getDocs, collection } = await import('firebase/firestore');
     const usersSnap = await getDocs(collection(db, 'users'));
+    const targetEst = establishmentId || 'EDU-001';
     
-    const targetDocs = establishmentId
-      ? usersSnap.docs.filter(doc => (doc.data().etablissement || 'EDU-001') === establishmentId)
-      : usersSnap.docs;
+    // Strictly isolate to users of the specified establishment
+    const targetDocs = usersSnap.docs.filter(doc => (doc.data().etablissement || 'EDU-001') === targetEst);
 
     const promises = targetDocs.map(userDoc => 
-      createNotification({
+      addDoc(collection(db, 'notifications'), {
         user_id: userDoc.id,
         title,
         message,
         type,
-        targetTab
+        targetTab,
+        read: false,
+        timestamp: new Date().toISOString(),
+        etablissement: targetEst
       })
     );
     
