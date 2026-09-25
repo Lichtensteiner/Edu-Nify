@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useEstablishment } from '../contexts/EstablishmentContext';
 import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, getDoc, deleteDoc, orderBy, limit, arrayUnion } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { 
@@ -57,6 +58,8 @@ interface Notification {
 export default function StudentDashboard({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const { t } = useLanguage();
   const { currentUser, logout } = useAuth();
+  const { currentEstablishment } = useEstablishment();
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
   const [attendance, setAttendance] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [selectedNotificationState, setSelectedNotificationState] = useState<Notification | null>(null);
@@ -268,13 +271,15 @@ export default function StudentDashboard({ onNavigate }: { onNavigate?: (tab: st
     if (!currentUser) return;
     const notifQuery = query(collection(db, 'notifications'), where('user_id', '==', currentUser.id));
     const unsubscribeNotifs = onSnapshot(notifQuery, (snap) => {
-      const notifData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+      const notifData = snap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Notification & { etablissement?: string }))
+        .filter(n => (n.etablissement || currentUser.etablissement || 'EDU-001') === activeEstId);
       notifData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setNotifications(notifData);
     });
 
     return () => unsubscribeNotifs();
-  }, [currentUser]);
+  }, [currentUser, activeEstId]);
 
   const handleNotificationClick = async (notif: Notification) => {
     setSelectedNotification(notif);
