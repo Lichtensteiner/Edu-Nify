@@ -64,13 +64,16 @@ export const requestCertificate = async (studentData: {
     const docRef = await addDoc(collection(db, 'certificate_requests'), payload);
 
     // Notify administrators
+    const estId = studentData.schoolId && studentData.schoolId !== 'all' ? studentData.schoolId : 'EDU-001';
     await addDoc(collection(db, 'notifications'), {
       title: 'Nouvelle demande de Certificat de Scolarité',
       message: `L'élève ${studentData.studentName} (${studentData.className}) demande un certificat de scolarité.`,
       targetRoles: ['admin', 'personnel administratif', 'secretaire'],
-      targetSchoolId: studentData.schoolId || 'all',
+      targetSchoolId: estId,
+      etablissement: estId,
       type: 'info',
       createdAt: serverTimestamp(),
+      timestamp: new Date().toISOString(),
       isRead: false
     });
 
@@ -155,6 +158,7 @@ export const approveCertificateRequest = async (
     });
 
     // Send direct notification to the student
+    const studentEst = adminUser?.etablissement || 'EDU-001';
     await addDoc(collection(db, 'notifications'), {
       user_id: studentId,
       title: ' Certificat de Scolarité Disponible !',
@@ -162,6 +166,7 @@ export const approveCertificateRequest = async (
       type: 'success',
       timestamp: new Date().toISOString(),
       createdAt: serverTimestamp(),
+      etablissement: studentEst,
       read: false
     });
 
@@ -188,6 +193,7 @@ export const rejectCertificateRequest = async (
     });
 
     // Send direct notification to the student
+    const studentEst = adminUser?.etablissement || 'EDU-001';
     await addDoc(collection(db, 'notifications'), {
       user_id: studentId,
       title: ' Demande de Certificat Non Validée',
@@ -195,6 +201,7 @@ export const rejectCertificateRequest = async (
       type: 'warning',
       timestamp: new Date().toISOString(),
       createdAt: serverTimestamp(),
+      etablissement: studentEst,
       read: false
     });
 
