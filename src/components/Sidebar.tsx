@@ -23,6 +23,8 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
   const { t, tData } = useLanguage();
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
 
+  const activeEstId = currentEstablishment?.id || currentUser?.etablissement || 'EDU-001';
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -35,6 +37,8 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
       let count = 0;
       snapshot.docs.forEach(doc => {
         const data = doc.data();
+        // Strict establishment isolation: do not count unread messages from other establishments
+        if ((data.etablissement || currentUser.etablissement || 'EDU-001') !== activeEstId) return;
         if (data.unreadCounts && data.unreadCounts[currentUser.id]) {
           const unread = Number(data.unreadCounts[currentUser.id]);
           if (!isNaN(unread)) {
@@ -46,7 +50,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, activeEstId]);
 
   const categories = [
     {
@@ -214,7 +218,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                     'digital_binder', 'courses_subjects', 'classroom', 'grades', 'homework', 'student_card', 
                     'canteen', 'planning', 'surveys', 'settings'
                   ];
-                  if (!allowedStudentTabs.includes(item.id)) return false;
+                  return allowedStudentTabs.includes(item.id);
                 }
 
                 // Direct filtered items for Cooks (cuisinier)
