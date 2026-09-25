@@ -733,7 +733,8 @@ export default function Users() {
           user_id: user.id,
           title: notificationData.title,
           message: notificationData.message,
-          type: notificationData.type as any
+          type: notificationData.type as any,
+          etablissement: user.etablissement || currentEstablishment?.id || 'EDU-001'
         })
       );
       
