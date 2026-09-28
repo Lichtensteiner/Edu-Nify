@@ -1,0 +1,495 @@
+import { 
+  collection, 
+  doc, 
+  addDoc, 
+  getDoc, 
+  getDocs, 
+  updateDoc, 
+  deleteDoc, 
+  setDoc, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp, 
+  increment 
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { createNotification, notifyAllUsers } from './NotificationService';
+
+export interface OnlineSession {
+  id: string;
+  title: string;
+  subject: string;
+  classe: string;
+  description?: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  durationMinutes: number;
+  virtualRoomId: string;
+  teacherId: string;
+  teacherName: string;
+  isLive: boolean;
+  status: 'scheduled' | 'live' | 'completed' | 'cancelled';
+  recordingEnabled: boolean;
+  recordingUrl?: string;
+  recordingDuration?: string;
+  isLocked?: boolean;
+  etablissement: string;
+  resources?: {
+    id: string;
+    title: string;
+    type: 'pdf' | 'docx' | 'video' | 'link' | 'exercise';
+    url: string;
+    size?: string;
+  }[];
+  createdAt: any;
+}
+
+export interface OnlineAttendance {
+  id?: string;
+  sessionId: string;
+  studentId: string;
+  studentName: string;
+  classe: string;
+  etablissement: string;
+  joinedAt: string;
+  leftAt?: string;
+  durationMinutes: number;
+  status: 'present' | 'late' | 'partial' | 'absent';
+  deviceInfo?: string;
+}
+
+export interface InClassMessage {
+  id: string;
+  sessionId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+  text: string;
+  timestamp: string;
+  isSystem?: boolean;
+  etablissement: string;
+}
+
+export interface HandRaise {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  studentName: string;
+  raisedAt: string;
+  status: 'pending' | 'allowed' | 'dismissed';
+}
+
+export interface OnlineResource {
+  id: string;
+  title: string;
+  subject: string;
+  classe: string;
+  type: 'pdf' | 'docx' | 'video' | 'link' | 'exercise';
+  url: string;
+  size?: string;
+  sessionId?: string;
+  uploadedBy?: string;
+  etablissement: string;
+  createdAt?: any;
+}
+
+export interface WhiteboardStroke {
+  id?: string;
+  points: { x: number; y: number }[];
+  color: string;
+  width: number;
+  isEraser?: boolean;
+  createdAt?: any;
+}
+
+// 1. Create / Schedule Online Session
+export const createOnlineSession = async (sessionData: Omit<OnlineSession, 'id' | 'createdAt' | 'status' | 'isLive'>) => {
+  try {
+    const estId = sessionData.etablissement || 'EDU-001';
+    const payload = {
+      ...sessionData,
+      status: 'scheduled',
+      isLive: false,
+      isLocked: false,
+      etablissement: estId,
+      createdAt: serverTimestamp(),
+    };
+
+    const docRef = await addDoc(collection(db, 'online_sessions'), payload);
+
+    // Notify all students of the concerned class in this establishment (wrapped safely)
+    try {
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const targetClassClean = (sessionData.classe || '').trim().toLowerCase();
+
+      const targetStudents = usersSnap.docs.filter(docSnap => {
+        const u = docSnap.data();
+        const uEst = u.etablissement || 'EDU-001';
+        if (uEst !== estId) return false;
+        const roleLower = (u.role || '').toLowerCase();
+        const isStudent = roleLower.includes('él') || roleLower.includes('eleve') || roleLower === 'student';
+        if (!isStudent) return false;
+        const userClass = (u.classe || '').trim().toLowerCase();
+        return userClass === targetClassClean || 
+               userClass.startsWith(targetClassClean) || 
+               targetClassClean.startsWith(userClass);
+      });
+
+      const notifyPromises = targetStudents.map(studentDoc => 
+        createNotification({
+          user_id: studentDoc.id,
+          title: `📚 Nouveau cours en ligne : ${sessionData.title}`,
+          message: `Le cours de ${sessionData.subject} (${sessionData.classe}) est programmé le ${sessionData.date} de ${sessionData.startTime} à ${sessionData.endTime} avec M. ${sessionData.teacherName}. Cliquez pour le suivre.`,
+          type: 'info',
+          targetTab: 'online_courses',
+          etablissement: estId
+        })
+      );
+
+      await Promise.all(notifyPromises);
+    } catch (notifErr) {
+      console.warn("Could not dispatch scheduled class notifications:", notifErr);
+    }
+
+    return docRef.id;
+  } catch (error) {
+    console.error("Error creating online session:", error);
+    throw error;
+  }
+};
+
+// 2. Start a Live Session (Teacher becomes HOST)
+export const startOnlineSession = async (sessionId: string, session: OnlineSession) => {
+  try {
+    const docRef = doc(db, 'online_sessions', sessionId);
+    await updateDoc(docRef, {
+      status: 'live',
+      isLive: true,
+      startedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    const estId = session.etablissement || 'EDU-001';
+    const targetClassClean = (session.classe || '').trim().toLowerCase();
+
+    // Broadcast instant alert to all class students that session has started (wrapped safely)
+    try {
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const targetStudents = usersSnap.docs.filter(docSnap => {
+        const u = docSnap.data();
+        const uEst = u.etablissement || 'EDU-001';
+        if (uEst !== estId) return false;
+        const roleLower = (u.role || '').toLowerCase();
+        const isStudent = roleLower.includes('él') || roleLower.includes('eleve') || roleLower === 'student';
+        if (!isStudent) return false;
+        const userClass = (u.classe || '').trim().toLowerCase();
+        return userClass === targetClassClean || 
+               userClass.startsWith(targetClassClean) || 
+               targetClassClean.startsWith(userClass);
+      });
+
+      const notifyPromises = targetStudents.map(studentDoc => 
+        createNotification({
+          user_id: studentDoc.id,
+          title: `🔴 En direct : Le cours ${session.title} commence !`,
+          message: `M. ${session.teacherName} a ouvert la salle virtuelle pour votre classe (${session.classe} - ${session.subject}). Rejoignez immédiatement le direct !`,
+          type: 'success',
+          targetTab: 'online_courses',
+          etablissement: estId
+        })
+      );
+
+      await Promise.all(notifyPromises);
+    } catch (notifErr) {
+      console.warn("Could not dispatch live start notifications:", notifErr);
+    }
+  } catch (error) {
+    console.error("Error starting online session:", error);
+    throw error;
+  }
+};
+
+// 3. End Online Session & automatically finalize unclosed student attendances
+export const endOnlineSession = async (sessionId: string, durationMinutes?: number) => {
+  try {
+    const docRef = doc(db, 'online_sessions', sessionId);
+    await updateDoc(docRef, {
+      status: 'completed',
+      isLive: false,
+      endedAt: serverTimestamp(),
+      ...(durationMinutes ? { durationMinutes } : {})
+    });
+
+    // Automatically close any still active student attendance records
+    try {
+      const attSnap = await getDocs(query(collection(db, 'online_attendance'), where('sessionId', '==', sessionId)));
+      const nowStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const closePromises = attSnap.docs
+        .filter(d => !d.data().leftAt)
+        .map(d => updateDoc(d.ref, { 
+          leftAt: nowStr, 
+          duration: `${durationMinutes || 60} min`
+        }));
+      await Promise.all(closePromises);
+    } catch (e) {
+      console.warn("Could not auto-close active attendances:", e);
+    }
+  } catch (error) {
+    console.error("Error ending online session:", error);
+    throw error;
+  }
+};
+
+// 4. Record Attendance Automatically on Join
+export const logStudentJoin = async (
+  sessionId: string, 
+  student: { id: string; nom: string; prenom: string; classe?: string; etablissement?: string },
+  sessionStartTime: string
+) => {
+  try {
+    const estId = student.etablissement || 'EDU-001';
+    const now = new Date();
+    const joinTimeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+    // Calculate if student is late (e.g. joined more than 10 mins after start)
+    let status: 'present' | 'late' = 'present';
+    if (sessionStartTime) {
+      const [startH, startM] = sessionStartTime.split(':').map(Number);
+      const currentH = now.getHours();
+      const currentM = now.getMinutes();
+      const diffMins = (currentH * 60 + currentM) - (startH * 60 + startM);
+      if (diffMins > 10) {
+        status = 'late';
+      }
+    }
+
+    // Check if attendance record already exists for this session
+    const q = query(
+      collection(db, 'online_attendance'),
+      where('sessionId', '==', sessionId),
+      where('studentId', '==', student.id)
+    );
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      const docRef = await addDoc(collection(db, 'online_attendance'), {
+        sessionId,
+        studentId: student.id,
+        studentName: `${student.prenom || ''} ${student.nom || ''}`.trim() || 'Élève',
+        classe: student.classe || 'N/A',
+        etablissement: estId,
+        joinedAt: joinTimeStr,
+        leftAt: '',
+        durationMinutes: 0,
+        status,
+        createdAt: serverTimestamp()
+      });
+      return docRef.id;
+    } else {
+      return snap.docs[0].id;
+    }
+  } catch (error) {
+    console.error("Error logging student attendance join:", error);
+    return null;
+  }
+};
+
+// 5. Update Attendance on Leave
+export const logStudentLeave = async (attendanceId: string, joinTimeStr: string) => {
+  if (!attendanceId) return;
+  try {
+    const now = new Date();
+    const leaveTimeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+    // Estimate duration
+    let durationMinutes = 30; // fallback
+    if (joinTimeStr && joinTimeStr.includes(':')) {
+      const [jH, jM] = joinTimeStr.split(':').map(Number);
+      const lH = now.getHours();
+      const lM = now.getMinutes();
+      const total = (lH * 60 + lM) - (jH * 60 + jM);
+      if (total > 0) durationMinutes = total;
+    }
+
+    const docRef = doc(db, 'online_attendance', attendanceId);
+    await updateDoc(docRef, {
+      leftAt: leaveTimeStr,
+      durationMinutes,
+      updatedAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("Error logging student attendance leave:", error);
+  }
+};
+
+// 6. Real-time In-Session Chat
+export const sendInClassMessage = async (
+  sessionId: string,
+  user: { id: string; nom: string; prenom: string; role: string; etablissement?: string },
+  text: string,
+  isSystem = false
+) => {
+  try {
+    const estId = user.etablissement || 'EDU-001';
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const senderName = isSystem ? 'Système Edu-Nify' : `${user.prenom || ''} ${user.nom || ''}`.trim();
+
+    await addDoc(collection(db, `online_sessions/${sessionId}/messages`), {
+      sessionId,
+      senderId: user.id,
+      senderName,
+      senderRole: user.role,
+      text: text.trim(),
+      timestamp,
+      isSystem,
+      etablissement: estId,
+      createdAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("Error sending in-class message:", error);
+  }
+};
+
+// 7. Hand Raise System
+export const raiseHand = async (sessionId: string, student: { id: string; nom: string; prenom: string }) => {
+  try {
+    const studentName = `${student.prenom || ''} ${student.nom || ''}`.trim() || 'Un élève';
+    const now = new Date();
+    const raisedAt = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+    await setDoc(doc(db, `online_sessions/${sessionId}/hands`, student.id), {
+      sessionId,
+      studentId: student.id,
+      studentName,
+      raisedAt,
+      status: 'pending',
+      timestamp: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("Error raising hand:", error);
+  }
+};
+
+export const lowerHand = async (sessionId: string, studentId: string) => {
+  try {
+    await deleteDoc(doc(db, `online_sessions/${sessionId}/hands`, studentId));
+  } catch (error) {
+    console.error("Error lowering hand:", error);
+  }
+};
+
+// 8. Save Recorded Course Metadata
+export const saveCourseRecording = async (sessionId: string, recordingData: {
+  title: string;
+  subject: string;
+  classe: string;
+  teacherName: string;
+  durationMinutes: number;
+  videoUrl: string;
+  attendanceCount: number;
+  etablissement: string;
+}) => {
+  try {
+    await addDoc(collection(db, 'online_recordings'), {
+      ...recordingData,
+      sessionId,
+      createdAt: serverTimestamp()
+    });
+
+    // Also link to the session document
+    await updateDoc(doc(db, 'online_sessions', sessionId), {
+      recordingUrl: recordingData.videoUrl,
+      recordingDuration: `${recordingData.durationMinutes} min`
+    });
+  } catch (error) {
+    console.error("Error saving course recording:", error);
+  }
+};
+
+// 9. Delete Online Session
+export const deleteOnlineSession = async (sessionId: string) => {
+  try {
+    const docRef = doc(db, 'online_sessions', sessionId);
+    await deleteDoc(docRef);
+
+    // Also clean up any attendance records linked to this session
+    try {
+      const attSnap = await getDocs(query(collection(db, 'online_attendance'), where('sessionId', '==', sessionId)));
+      const delPromises = attSnap.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(delPromises);
+    } catch (e) {
+      console.warn("Could not clean up attendance records on session delete:", e);
+    }
+  } catch (error) {
+    console.error("Error deleting online session:", error);
+    throw error;
+  }
+};
+
+// 10. Update Online Session
+export const updateOnlineSession = async (sessionId: string, updates: Partial<OnlineSession>) => {
+  try {
+    await updateDoc(doc(db, 'online_sessions', sessionId), {
+      ...updates,
+      updatedAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("Error updating online session:", error);
+    throw error;
+  }
+};
+
+// 11. Add Online Resource (Real files, links, worksheets)
+export const addOnlineResource = async (resourceData: Omit<OnlineResource, 'id' | 'createdAt'>) => {
+  try {
+    const docRef = await addDoc(collection(db, 'online_resources'), {
+      ...resourceData,
+      createdAt: serverTimestamp()
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error("Error adding online resource:", error);
+    throw error;
+  }
+};
+
+// 12. Delete Online Resource
+export const deleteOnlineResource = async (resourceId: string) => {
+  try {
+    await deleteDoc(doc(db, 'online_resources', resourceId));
+  } catch (error) {
+    console.error("Error deleting online resource:", error);
+    throw error;
+  }
+};
+
+// 13. Sync Whiteboard Stroke in Real-Time
+export const syncWhiteboardStroke = async (
+  sessionId: string, 
+  stroke: { points: { x: number; y: number }[]; color: string; width: number; isEraser?: boolean }
+) => {
+  try {
+    await addDoc(collection(db, `online_sessions/${sessionId}/whiteboard`), {
+      ...stroke,
+      createdAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("Error syncing whiteboard stroke:", error);
+  }
+};
+
+// 14. Clear Whiteboard
+export const clearWhiteboardStrokes = async (sessionId: string) => {
+  try {
+    const snap = await getDocs(collection(db, `online_sessions/${sessionId}/whiteboard`));
+    const deletePromises = snap.docs.map(d => deleteDoc(d.ref));
+    await Promise.all(deletePromises);
+  } catch (error) {
+    console.error("Error clearing whiteboard:", error);
+  }
+};
+
