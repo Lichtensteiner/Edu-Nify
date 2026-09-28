@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, CalendarCheck, FileText, Settings, BookOpen, Code, LogOut, ScanLine, Smartphone, CreditCard, Trophy, ScanFace, Activity, GraduationCap, UserCircle, Castle, X, Calendar as CalendarIcon, MessageSquare, BookUser, MessageCircle, Info, Sparkles, Wallet, ShieldAlert, History, Award, ShieldCheck, Scale, Utensils, Library, Vote, FileBadge, Building2, FolderClosed, Cpu, Trash2 } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarCheck, FileText, Settings, BookOpen, Code, LogOut, ScanLine, Smartphone, CreditCard, Trophy, ScanFace, Activity, GraduationCap, UserCircle, Castle, X, Calendar as CalendarIcon, MessageSquare, BookUser, MessageCircle, Info, Sparkles, Wallet, ShieldAlert, History, Award, ShieldCheck, Scale, Utensils, Library, Vote, FileBadge, Building2, FolderClosed, Cpu, Trash2, Video } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useEstablishment } from '../contexts/EstablishmentContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -69,6 +69,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
     {
       title: t('schooling_category'),
       items: [
+        { id: 'online_courses', labelKey: 'online_courses', icon: Video, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'digital_binder', labelKey: 'digital_binder', icon: FolderClosed, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'classroom', labelKey: 'classroom', icon: GraduationCap, roles: ['admin', 'enseignant', 'élève'] },
         { id: 'homework', labelKey: 'homework', icon: BookOpen, roles: ['admin', 'enseignant', 'élève', 'parent'] },
