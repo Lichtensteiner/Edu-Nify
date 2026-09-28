@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ptTranslations } from './ptTranslations';
+import { initGoogleTranslate, applyGoogleLanguage } from '../services/universalTranslator';
 
 export type Language = 'fr' | 'en' | 'es' | 'zh' | 'ja' | 'pt';
 
@@ -11,6 +12,7 @@ interface Translations {
 
 const translations: Translations = {
   // Sidebar
+  'online_courses': { fr: 'Cours en ligne', en: 'Online Courses', es: 'Cursos en línea', zh: '在线课程', ja: 'オンラインコース', pt: 'Cursos Online' },
   'library': { fr: 'Bibliothèque', en: 'Library', es: 'Biblioteca', zh: '图书馆', ja: '図書館' },
   'trash': { fr: 'Corbeille', en: 'Trash', es: 'Papelera', zh: '回收站', ja: 'ゴミ箱' },
   'dossiers_agents': { fr: 'Portail Dossiers & Agents', en: 'Dossiers & Agents Portal', es: 'Portal de Expedientes y Agentes', zh: '档案 with 代理门户', ja: 'ドシエ＆エージェントポータル' },
@@ -70,6 +72,7 @@ const translations: Translations = {
 
 
   'student_greeting': { fr: 'Bonjour, Élève', en: 'Hello, Student', es: 'Hola, Estudiante', zh: '你好，学生', ja: 'こんにちは、学生' },
+  'online_courses': { fr: 'Cours en ligne', en: 'Online Courses', es: 'Cursos en línea', zh: '在线课程', ja: 'オンラインコース' },
   'digital_binder': { fr: 'Classeur Numérique', en: 'Digital Binder', es: 'Carpeta Digital', zh: '电子活页夹', ja: 'デジタルバインダー' },
   'student_dashboard': { fr: 'Tableau de bord Élève', en: 'Student Dashboard', es: 'Panel de Estudiante', zh: '学生仪表板', ja: '学生ダッシュボード' },
   'student_card': { fr: 'Carte Utilisateur', en: 'User Card', es: 'Tarjeta de Usuario', zh: '用户卡', ja: 'ユーザーカード' },
@@ -227,7 +230,6 @@ const translations: Translations = {
   'school_share': { fr: 'Part de l\'école', en: 'School share', es: 'Cuota escolar', zh: '学校份额', ja: '学校のシェア' },
   'teachers': { fr: 'Enseignants', en: 'Teachers', es: 'Profesores', zh: '教师', ja: '先生' },
   'students': { fr: 'Élèves', en: 'Students', es: 'Estudiantes', zh: '学生', ja: '学生' },
-  'parents': { fr: 'Parents', en: 'Parents', es: 'Padres', zh: '父母', ja: '保護者' },
   'finance_management_desc': { fr: 'Gestion des paiements et frais scolaires', en: 'Management of payments and school fees', es: 'Gestión de pagos y cuotas escolares', zh: '支付和学费管理', ja: '支払いと学費の管理' },
   'financial_report': { fr: 'Rapport Financier', en: 'Financial Report', es: 'Informe Financiero', zh: '财务报告', ja: '財務レポート' },
   'record_payment': { fr: 'Enregistrer un paiement', en: 'Record a payment', es: 'Registrar un pago', zh: '记录付款', ja: '支払いを記録' },
@@ -1100,6 +1102,36 @@ const translations: Translations = {
   'download_json': { fr: 'Télécharger (.json)', en: 'Download (.json)', es: 'Descargar (.json)', pt: 'Baixar (.json)', zh: '下载 (.json)', ja: 'ダウンロード (.json)' },
   'empty_btn': { fr: 'Vider', en: 'Empty', es: 'Vaciar', pt: 'Esvaziar', zh: '清空', ja: 'クリア' },
   'clear_logs_tooltip': { fr: 'Vider le fichier de logs', en: 'Clear log file', es: 'Vaciar archivo de registros', pt: 'Limpar arquivo de registos', zh: '清空日志文件', ja: 'ログ de 削除' },
+  'secure_accounting_space': { fr: 'Espace Comptable Sécurisé', en: 'Secure Accounting Space', es: 'Espacio Contable Seguro', pt: 'Espaço Contábil Seguro', zh: '安全会计空间', ja: '安全な会計スペース' },
+  'accounting_stats_desc': { fr: "Toutes les statistiques d'effectifs et données utilisateur sont filtrées pour votre établissement.", en: "All headcount statistics and user data are filtered for your establishment.", es: "Todas las estadísticas de plantilla y datos de usuario están filtrados para su centro.", pt: "Todas as estatísticas de pessoal e dados de utilizador são filtrados para o seu estabelecimento.", zh: "所有人员编制统计和用户数据均针对您所在的机构进行筛选。", ja: "すべての人員統計とユーザーデータは施設ごとにフィルタリングされます。" },
+  'global_headcount': { fr: 'Effectif Global Actuel', en: 'Current Total Headcount', es: 'Plantilla Global Actual', pt: 'Efetivo Global Atual', zh: '当前总人数', ja: '現在の人員総数' },
+  'total_headcount': { fr: 'Effectif Total', en: 'Total Headcount', es: 'Plantilla Total', pt: 'Efetivo Total', zh: '总人数', ja: '総人数' },
+  'active_members': { fr: 'Membres actifs', en: 'Active members', es: 'Miembros activos', pt: 'Membros ativos', zh: '活跃成员', ja: 'アクティブメンバー' },
+  'enrolled_learners': { fr: 'Apprenants inscrits', en: 'Enrolled learners', es: 'Estudiantes inscritos', pt: 'Alunos matriculados', zh: '注册学生', ja: '登録された学習者' },
+  'teaching_staff': { fr: 'Corps professoral', en: 'Teaching staff', es: 'Cuerpo docente', pt: 'Corpo docente', zh: '教职工', ja: '教員スタッフ' },
+  'administration_category': { fr: 'Administration', en: 'Administration', es: 'Administración', pt: 'Administração', zh: '行政管理', ja: '管理' },
+  'other_staff_members': { fr: 'Parents, comptables, etc.', en: 'Parents, accountants, etc.', es: 'Padres, contables, etc.', pt: 'Pais, contabilistas, etc.', zh: '家长、会计等', ja: '保護者、会計士など' },
+  'gender_distribution': { fr: 'Répartition par Sexe', en: 'Gender Distribution', es: 'Distribución por Género', pt: 'Distribuição por Género', zh: '性别分布', ja: '性別分布' },
+  'gender_analysis_desc': { fr: "Analyse démographique des genres de l'établissement.", en: "Demographic gender breakdown of the establishment.", es: "Análisis demográfico de género de la institución.", pt: "Análise demográfica de género do estabelecimento.", zh: "学校机构的人口统计性别分布。", ja: "施設の性別人口動態分析。" },
+  'role_distribution': { fr: 'Répartition par Rôle', en: 'Role Distribution', es: 'Distribución por Rol', pt: 'Distribuição por Função', zh: '角色分布', ja: '役割の分布' },
+  'role_analysis_desc': { fr: 'Classification des comptes utilisateurs par niveau de responsabilité.', en: 'User account classification by level of responsibility.', es: 'Clasificación de cuentas de usuario por nivel de responsabilidad.', pt: 'Classificação de contas de utilizador por nível de responsabilidade.', zh: '按责任级别对用户账户进行分类。', ja: '責任レベルによるユーザーアカウントの分類。' },
+  'users_directory': { fr: 'Annuaire des Utilisateurs', en: 'Users Directory', es: 'Directorio de Usuarios', pt: 'Diretório de Utilizadores', zh: '用户名录', ja: 'ユーザーディレクトリ' },
+  'users_directory_desc': { fr: "Consultez, recherchez et filtrez l'ensemble des membres affectés à votre établissement.", en: "View, search, and filter all members assigned to your establishment.", es: "Consulte, busque y filtre todos los miembros asignados a su centro.", pt: "Consulte, pesquise e filtre todos os membros atribuídos ao seu estabelecimento.", zh: "查看、搜索和筛选分配给您所在机构的所有成员。", ja: "施設に割り当てられたすべてのメンバーを表示、検索、フィルタリングします。" },
+  'results_found': { fr: 'résultats trouvés', en: 'results found', es: 'resultados encontrados', pt: 'resultados encontrados', zh: '找到结果', ja: '件の結果' },
+  'search_users_placeholder': { fr: 'Rechercher par nom, e-mail...', en: 'Search by name, email...', es: 'Buscar por nombre, correo...', pt: 'Pesquisar por nome, email...', zh: '按姓名、邮箱搜索...', ja: '名前、メールで検索...' },
+  'all_roles': { fr: 'Tous les rôles', en: 'All roles', es: 'Todos los roles', pt: 'Todas as funções', zh: '所有角色', ja: 'すべての役割' },
+  'all_genders': { fr: 'Tous les sexes', en: 'All genders', es: 'Todos los géneros', pt: 'Todos os géneros', zh: '所有性别', ja: 'すべての性別' },
+  'men': { fr: 'Hommes', en: 'Men', es: 'Hombres', pt: 'Homens', zh: '男', ja: '男性' },
+  'man': { fr: 'Homme', en: 'Man', es: 'Hombre', pt: 'Homem', zh: '男', ja: '男性' },
+  'women': { fr: 'Femmes', en: 'Women', es: 'Mujeres', pt: 'Mulheres', zh: '女', ja: '女性' },
+  'woman': { fr: 'Femme', en: 'Woman', es: 'Mujer', pt: 'Mulher', zh: '女', ja: '女性' },
+  'other_unspecified': { fr: 'Autres / Non renseigné', en: 'Other / Unspecified', es: 'Otro / No especificado', pt: 'Outro / Não especificado', zh: '其他 / 未指定', ja: 'その他 / 未指定' },
+  'unspecified': { fr: 'Non spécifié', en: 'Unspecified', es: 'No especificado', pt: 'Não especificado', zh: '未指定', ja: '未指定' },
+  'assignment': { fr: 'Affectation', en: 'Assignment', es: 'Asignación', pt: 'Atribuição', zh: '分配', ja: '配属' },
+  'no_users_match_filter': { fr: 'Aucun utilisateur ne correspond aux filtres appliqués', en: 'No users match the applied filters', es: 'Ningún usuario coincide con los filtros aplicados', pt: 'Nenhum utilizador corresponde aos filtros aplicados', zh: '没有符合所应用筛选条件的用户', ja: '適用されたフィルターに一致するユーザーはいません' },
+  'role_comptable': { fr: 'Comptable', en: 'Accountant', es: 'Contable', pt: 'Contabilista', zh: '会计师', ja: '会計士' },
+  'hello': { fr: 'Bonjour', en: 'Hello', es: 'Hola', pt: 'Olá', zh: '你好', ja: 'こんにちは' },
+  'welcome_back': { fr: 'ravi de vous revoir !', en: 'glad to see you again!', es: '¡encantado de verte de nuevo!', pt: 'bom vê-lo novamente!', zh: '很高兴再次见到您！', ja: 'またお会いできて嬉しいです！' },
 };
 
 // Merge dynamically generated Portuguese translations
@@ -1121,14 +1153,27 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguage] = useState<Language>(() => {
+  const [language, setLanguageState] = useState<Language>(() => {
     const saved = localStorage.getItem('app_language');
     return (saved as Language) || 'fr';
   });
 
+  // Initialize universal Google Translate engine on mount
+  useEffect(() => {
+    initGoogleTranslate();
+  }, []);
+
+  // Update storage and trigger universal translator whenever language changes
   useEffect(() => {
     localStorage.setItem('app_language', language);
+    applyGoogleLanguage(language);
   }, [language]);
+
+  const setLanguage = (lang: Language) => {
+    setLanguageState(lang);
+    localStorage.setItem('app_language', lang);
+    applyGoogleLanguage(lang);
+  };
 
   const t = (key: string) => {
     return translations[key]?.[language] || translations[key]?.['fr'] || translations[key]?.['en'] || key;
@@ -1142,7 +1187,16 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       'élève': 'role_élève',
       'parent': 'role_parent',
       'personnel administratif': 'role_personnel administratif',
+      'Personnel administratif': 'role_personnel administratif',
       'cuisinier': 'role_cuisinier',
+      'comptable': 'role_comptable',
+      'Comptable': 'role_comptable',
+      'Enseignant': 'role_enseignant',
+      'Élève': 'role_élève',
+      'Eleve': 'role_élève',
+      'Administrateur': 'role_admin',
+      'Homme': 'man',
+      'Femme': 'woman',
       'Présent': 'status_Présent',
       'Retard': 'status_Retard',
       'Absent': 'status_Absent',
