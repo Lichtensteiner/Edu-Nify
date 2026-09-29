@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
-import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
+import { ThemeProvider } from "./contexts/ThemeContext";
+import { LanguageProvider } from "./contexts/LanguageContext";
 import { NotificationProvider, useNotification } from "./contexts/NotificationContext";
 import { EstablishmentProvider } from "./contexts/EstablishmentContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -47,6 +47,7 @@ import LudoAIPlus from "./pages/LudoAIPlus";
 import Messaging from "./pages/Messaging";
 import MobileApp from "./pages/MobileApp";
 import NewsFeed from "./pages/NewsFeed";
+import OnlineCourses from "./pages/OnlineCourses";
 import ParentDashboard from "./pages/ParentDashboard";
 import Profile from "./pages/Profile";
 import RecentConnections from "./pages/RecentConnections";
@@ -70,8 +71,6 @@ import { Trash } from "./pages/Trash";
 
 function AppContent() {
   const { currentUser, loading } = useAuth();
-  const { theme } = useTheme();
-  const { t } = useLanguage();
   const { notifySuccess, notifyError } = useNotification();
   
   // Navigation states
@@ -80,16 +79,13 @@ function AppContent() {
   const [chatTargetId, setChatTargetId] = useState<string | null>(null);
   const [prepId, setPrepId] = useState<any>(null);
   const [classroomName, setClassroomName] = useState<any>(null);
+  const [onlineSessionId, setOnlineSessionId] = useState<string | null>(null);
 
   // Set default tab on user login based on role
   useEffect(() => {
     if (currentUser) {
       if (currentUser.role === "élève") {
         setActiveTab("student_dashboard");
-      } else if (currentUser.role === "parent") {
-        setActiveTab("dashboard");
-      } else if (currentUser.role === "cuisinier") {
-        setActiveTab("dashboard");
       } else {
         setActiveTab("dashboard");
       }
@@ -106,12 +102,14 @@ function AppContent() {
         setPrepId(event.state.prepId ?? null);
         setClassroomName(event.state.classroomName ?? null);
         setChatTargetId(event.state.chatTargetId ?? null);
+        setOnlineSessionId(event.state.onlineSessionId ?? null);
       } else {
         const defaultTab = currentUser.role === "élève" ? "student_dashboard" : "dashboard";
         setActiveTab(defaultTab);
         setPrepId(null);
         setClassroomName(null);
         setChatTargetId(null);
+        setOnlineSessionId(null);
       }
     };
 
@@ -120,7 +118,7 @@ function AppContent() {
     // Initialize/Replace the initial entry in history if it doesn't exist yet
     const defaultTab = currentUser.role === "élève" ? "student_dashboard" : "dashboard";
     if (!window.history.state) {
-      window.history.replaceState({ tab: defaultTab, prepId: null, classroomName: null, chatTargetId: null }, "");
+      window.history.replaceState({ tab: defaultTab, prepId: null, classroomName: null, chatTargetId: null, onlineSessionId: null }, "");
     }
 
     return () => {
@@ -141,15 +139,16 @@ function AppContent() {
                        currentState.tab !== activeTab || 
                        currentState.prepId !== prepId ||
                        currentState.classroomName !== classroomName ||
-                       currentState.chatTargetId !== chatTargetId;
+                       currentState.chatTargetId !== chatTargetId ||
+                       currentState.onlineSessionId !== onlineSessionId;
 
     if (shouldPush) {
       window.history.pushState(
-        { tab: activeTab, prepId, classroomName, chatTargetId },
+        { tab: activeTab, prepId, classroomName, chatTargetId, onlineSessionId },
         ""
       );
     }
-  }, [activeTab, prepId, classroomName, chatTargetId, currentUser]);
+  }, [activeTab, prepId, classroomName, chatTargetId, onlineSessionId, currentUser]);
 
   // Navigate function passed to components
   const handleNavigate = (tab: string, params?: any) => {
@@ -162,6 +161,9 @@ function AppContent() {
     }
     if (tab === "messaging" && params?.chatTargetId) {
       setChatTargetId(params.chatTargetId);
+    }
+    if (tab === "online_courses" && params?.sessionId) {
+      setOnlineSessionId(params.sessionId);
     }
   };
 
@@ -231,6 +233,8 @@ function AppContent() {
         return <About />;
       case "terms":
         return <TermsAndConditions />;
+      case "online_courses":
+        return <OnlineCourses onNavigate={handleNavigate} initialSessionId={onlineSessionId || undefined} />;
       case "digital_binder":
         return <DigitalBinder onNavigate={handleNavigate} />;
       case "classroom":
