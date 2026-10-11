@@ -162,7 +162,7 @@ function AppContent() {
     if (tab === "messaging" && params?.chatTargetId) {
       setChatTargetId(params.chatTargetId);
     }
-    if (tab === "online_courses" && params?.sessionId) {
+    if ((tab === "online_courses" || tab === "cours_en_ligne" || tab === "online-courses" || tab === "virtual_classroom") && params?.sessionId) {
       setOnlineSessionId(params.sessionId);
     }
   };
@@ -234,6 +234,9 @@ function AppContent() {
       case "terms":
         return <TermsAndConditions />;
       case "online_courses":
+      case "cours_en_ligne":
+      case "online-courses":
+      case "virtual_classroom":
         return <OnlineCourses onNavigate={handleNavigate} initialSessionId={onlineSessionId || undefined} />;
       case "digital_binder":
         return <DigitalBinder onNavigate={handleNavigate} />;
