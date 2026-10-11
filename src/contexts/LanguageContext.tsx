@@ -13,6 +13,7 @@ interface Translations {
 const translations: Translations = {
   // Sidebar
   'online_courses': { fr: 'Cours en ligne', en: 'Online Courses', es: 'Cursos en línea', zh: '在线课程', ja: 'オンラインコース', pt: 'Cursos Online' },
+  'cours_en_ligne': { fr: 'Cours en ligne', en: 'Online Courses', es: 'Cursos en línea', zh: '在线课程', ja: 'オンラインコース', pt: 'Cursos Online' },
   'library': { fr: 'Bibliothèque', en: 'Library', es: 'Biblioteca', zh: '图书馆', ja: '図書館' },
   'trash': { fr: 'Corbeille', en: 'Trash', es: 'Papelera', zh: '回收站', ja: 'ゴミ箱' },
   'dossiers_agents': { fr: 'Portail Dossiers & Agents', en: 'Dossiers & Agents Portal', es: 'Portal de Expedientes y Agentes', zh: '档案 with 代理门户', ja: 'ドシエ＆エージェントポータル' },
