@@ -72,7 +72,6 @@ const translations: Translations = {
 
 
   'student_greeting': { fr: 'Bonjour, Élève', en: 'Hello, Student', es: 'Hola, Estudiante', zh: '你好，学生', ja: 'こんにちは、学生' },
-  'online_courses': { fr: 'Cours en ligne', en: 'Online Courses', es: 'Cursos en línea', zh: '在线课程', ja: 'オンラインコース' },
   'digital_binder': { fr: 'Classeur Numérique', en: 'Digital Binder', es: 'Carpeta Digital', zh: '电子活页夹', ja: 'デジタルバインダー' },
   'student_dashboard': { fr: 'Tableau de bord Élève', en: 'Student Dashboard', es: 'Panel de Estudiante', zh: '学生仪表板', ja: '学生ダッシュボード' },
   'student_card': { fr: 'Carte Utilisateur', en: 'User Card', es: 'Tarjeta de Usuario', zh: '用户卡', ja: 'ユーザーカード' },
@@ -855,7 +854,7 @@ const translations: Translations = {
   'main_category': { fr: 'Principal', en: 'Main', es: 'Principal', zh: '主要', ja: 'メイン' },
   'schooling_category': { fr: 'Scolarité', en: 'Schooling', es: 'Escolaridad', zh: '学校教育', ja: '学校教育' },
   'student_life_category': { fr: 'Vie Étudiante', en: 'Student Life', es: 'Vida Estudiantil', zh: '学生生活', ja: '学生生活' },
-  'administration_category': { fr: 'Administration', en: 'Administration', es: 'Administración', zh: '管理', ja: '管理' },
+  'administration_category': { fr: 'Administration', en: 'Administration', es: 'Administración', pt: 'Administração', zh: '行政管理', ja: '管理' },
 
   // Install Guide
   'install_app_title': { fr: 'Installer l\'application', en: 'Install the application', es: 'Instalar la aplicación', zh: '安装应用程序', ja: 'アプリをインストールする' },
@@ -1109,7 +1108,6 @@ const translations: Translations = {
   'active_members': { fr: 'Membres actifs', en: 'Active members', es: 'Miembros activos', pt: 'Membros ativos', zh: '活跃成员', ja: 'アクティブメンバー' },
   'enrolled_learners': { fr: 'Apprenants inscrits', en: 'Enrolled learners', es: 'Estudiantes inscritos', pt: 'Alunos matriculados', zh: '注册学生', ja: '登録された学習者' },
   'teaching_staff': { fr: 'Corps professoral', en: 'Teaching staff', es: 'Cuerpo docente', pt: 'Corpo docente', zh: '教职工', ja: '教員スタッフ' },
-  'administration_category': { fr: 'Administration', en: 'Administration', es: 'Administración', pt: 'Administração', zh: '行政管理', ja: '管理' },
   'other_staff_members': { fr: 'Parents, comptables, etc.', en: 'Parents, accountants, etc.', es: 'Padres, contables, etc.', pt: 'Pais, contabilistas, etc.', zh: '家长、会计等', ja: '保護者、会計士など' },
   'gender_distribution': { fr: 'Répartition par Sexe', en: 'Gender Distribution', es: 'Distribución por Género', pt: 'Distribuição por Género', zh: '性别分布', ja: '性別分布' },
   'gender_analysis_desc': { fr: "Analyse démographique des genres de l'établissement.", en: "Demographic gender breakdown of the establishment.", es: "Análisis demográfico de género de la institución.", pt: "Análise demográfica de género do estabelecimento.", zh: "学校机构的人口统计性别分布。", ja: "施設の性別人口動態分析。" },
@@ -1119,7 +1117,6 @@ const translations: Translations = {
   'users_directory_desc': { fr: "Consultez, recherchez et filtrez l'ensemble des membres affectés à votre établissement.", en: "View, search, and filter all members assigned to your establishment.", es: "Consulte, busque y filtre todos los miembros asignados a su centro.", pt: "Consulte, pesquise e filtre todos os membros atribuídos ao seu estabelecimento.", zh: "查看、搜索和筛选分配给您所在机构的所有成员。", ja: "施設に割り当てられたすべてのメンバーを表示、検索、フィルタリングします。" },
   'results_found': { fr: 'résultats trouvés', en: 'results found', es: 'resultados encontrados', pt: 'resultados encontrados', zh: '找到结果', ja: '件の結果' },
   'search_users_placeholder': { fr: 'Rechercher par nom, e-mail...', en: 'Search by name, email...', es: 'Buscar por nombre, correo...', pt: 'Pesquisar por nome, email...', zh: '按姓名、邮箱搜索...', ja: '名前、メールで検索...' },
-  'all_roles': { fr: 'Tous les rôles', en: 'All roles', es: 'Todos los roles', pt: 'Todas as funções', zh: '所有角色', ja: 'すべての役割' },
   'all_genders': { fr: 'Tous les sexes', en: 'All genders', es: 'Todos los géneros', pt: 'Todos os géneros', zh: '所有性别', ja: 'すべての性別' },
   'men': { fr: 'Hommes', en: 'Men', es: 'Hombres', pt: 'Homens', zh: '男', ja: '男性' },
   'man': { fr: 'Homme', en: 'Man', es: 'Hombre', pt: 'Homem', zh: '男', ja: '男性' },
