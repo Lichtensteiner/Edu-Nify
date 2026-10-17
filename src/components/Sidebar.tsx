@@ -197,7 +197,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 if (role === 'enseignant') {
                   const allowedTeacherTabs = [
                     'dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 
-                    'digital_binder', 'classroom', 'classes', 'courses_subjects', 
+                    'digital_binder', 'online_courses', 'classroom', 'classes', 'courses_subjects', 
                     'homework', 'grades', 'planning', 'attendance', 'surveys', 
                     'ai_assistant', 'settings', 'trash'
                   ];
@@ -207,7 +207,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 // Direct filtered items for Parents to keep it simple and focused
                 if (role === 'parent') {
                   const allowedParentTabs = [
-                    'dashboard', 'newsfeed', 'messaging', 'profile', 'digital_binder', 'calendar', 'planning', 'homework', 'grades', 'houses', 'clubs', 'leaderboard', 'library', 'canteen', 'surveys', 'finance', 'settings'
+                    'dashboard', 'newsfeed', 'messaging', 'profile', 'digital_binder', 'online_courses', 'calendar', 'planning', 'homework', 'grades', 'houses', 'clubs', 'leaderboard', 'library', 'canteen', 'surveys', 'finance', 'settings'
                   ];
                   if (!allowedParentTabs.includes(item.id)) return false;
                 }
@@ -216,7 +216,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 if (role === 'élève' || role === 'eleve') {
                   const allowedStudentTabs = [
                     'student_dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 
-                    'digital_binder', 'courses_subjects', 'classroom', 'grades', 'homework', 'student_card', 
+                    'digital_binder', 'online_courses', 'courses_subjects', 'classroom', 'grades', 'homework', 'student_card', 
                     'canteen', 'planning', 'surveys', 'settings'
                   ];
                   return allowedStudentTabs.includes(item.id);
