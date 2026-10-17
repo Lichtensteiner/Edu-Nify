@@ -17,6 +17,17 @@ class ErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
+    const msg = error?.message || '';
+    const stack = error?.stack || '';
+    if (
+      msg.includes('translate') ||
+      stack.includes('translate.googleapis.com') ||
+      stack.includes('translate_http') ||
+      msg.includes('removeChild') ||
+      msg.includes('insertBefore')
+    ) {
+      return { hasError: false, error: null };
+    }
     return { hasError: true, error };
   }
 
