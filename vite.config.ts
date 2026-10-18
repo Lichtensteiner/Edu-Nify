@@ -7,7 +7,7 @@ import path from 'node:path';
 
 // Fix any extensionless VirtualClassroom file that might exist on disk in the build environment (e.g. Vercel)
 try {
-  const vcNoExt = path.resolve(process.cwd(), 'src/components/VirtualClassroom');
+  const vcNoExt = path.resolve(process.cwd(), 'src/components/VirtualClassroom.tsx');
   const vcTsx = path.resolve(process.cwd(), 'src/components/VirtualClassroom.tsx');
   if (fs.existsSync(vcNoExt)) {
     const stat = fs.statSync(vcNoExt);
