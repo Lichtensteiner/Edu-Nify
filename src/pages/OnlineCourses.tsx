@@ -37,7 +37,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useEstablishment } from '../contexts/EstablishmentContext';
 import { useNotification } from '../contexts/NotificationContext';
-import VirtualClassroom from '../components/VirtualClassroom';
+import VirtualClassroom from '../components/VirtualClassroom.tsx';
 import { 
   OnlineSession, 
   OnlineAttendance,
