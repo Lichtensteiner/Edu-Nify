@@ -33,9 +33,12 @@ import {
   Download,
   TrendingDown,
   Receipt,
-  Eye
+  Eye,
+  GraduationCap,
+  MapPin
 } from 'lucide-react';
 import PDFViewerModal from '../components/PDFViewerModal';
+import { resolveTeacherForSubject } from '../utils/timetableTeacherResolver';
 import { 
   AreaChart, 
   Area, 
@@ -117,6 +120,8 @@ export default function ParentDashboard({ onNavigate, initialTab }: { onNavigate
   const [childHomework, setChildHomework] = useState<any[]>([]);
   const [childCourses, setChildCourses] = useState<any[]>([]);
   const [childAssignments, setChildAssignments] = useState<any[]>([]);
+  const [teachersList, setTeachersList] = useState<any[]>([]);
+  const [subjectsList, setSubjectsList] = useState<any[]>([]);
   const [childPayments, setChildPayments] = useState<any[]>([]);
   const [feeConfigs, setFeeConfigs] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'grades' | 'attendance' | 'homework' | 'courses' | 'timetable' | 'finance'>(initialTab || 'overview');
@@ -127,6 +132,49 @@ export default function ParentDashboard({ onNavigate, initialTab }: { onNavigate
   const [linkError, setLinkError] = useState('');
   const [linkSuccess, setLinkSuccess] = useState('');
   const [viewingPdf, setViewingPdf] = useState<{ url: string; name: string; size?: number } | null>(null);
+
+  // Écouter dynamiquement les enseignants et matières pour l'emploi du temps
+  useEffect(() => {
+    const unsubTeachers = onSnapshot(collection(db, 'users'), (snap) => {
+      const teachers = snap.docs
+        .filter(d => {
+          const role = (d.data().role || '').toLowerCase().trim();
+          return role.includes('enseign') || role.includes('prof') || role.includes('teacher');
+        })
+        .map(d => {
+          const data = d.data();
+          const prenom = data.prenom || '';
+          const nom = data.nom || '';
+          const fullName = `${prenom} ${nom}`.trim() || data.displayName || data.name || 'Enseignant';
+          const rawMatiere = data.matieres || (data.matiere ? [data.matiere] : []) || (data.specialite ? [data.specialite] : []);
+          const rawArray = Array.isArray(rawMatiere) ? rawMatiere : typeof rawMatiere === 'string' ? [rawMatiere] : [];
+          const prefix = data.civilite || (data.genre === 'F' ? 'Mme' : data.genre === 'M' ? 'M.' : 'Prof.');
+          const cleanName = prefix ? `${prefix} ${nom || fullName}` : fullName;
+          return {
+            id: d.id,
+            name: fullName,
+            cleanName: cleanName,
+            subjects: rawArray.map((m: any) => String(m).toLowerCase().trim())
+          };
+        });
+      setTeachersList(teachers);
+    });
+
+    const unsubSubjects = onSnapshot(collection(db, 'subjects'), (snap) => {
+      const subs = snap.docs.map(d => ({
+        id: d.id,
+        name: d.data().name as string || '',
+        teacherId: d.data().teacherId || '',
+        teacherName: d.data().teacherName || ''
+      }));
+      setSubjectsList(subs);
+    });
+
+    return () => {
+      unsubTeachers();
+      unsubSubjects();
+    };
+  }, []);
 
   useEffect(() => {
     if (initialTab) {
@@ -1185,19 +1233,46 @@ export default function ParentDashboard({ onNavigate, initialTab }: { onNavigate
                                           {matchedAssignments.length > 0 ? (
                                             matchedAssignments.map((assignment: any, i: number) => {
                                               const dynamicColor = assignment.color || COLORS[i % COLORS.length];
+                                              const resolved = resolveTeacherForSubject(
+                                                assignment.subject,
+                                                assignment.teacherId,
+                                                assignment.teacherName,
+                                                teachersList,
+                                                subjectsList
+                                              );
+
                                               return (
                                                 <div
                                                   key={assignment.id || i}
-                                                  className={`p-2.5 rounded-xl border text-xs h-full flex flex-col justify-between shadow-sm transition-transform hover:scale-[1.02] ${dynamicColor}`}
+                                                  className={`p-2.5 rounded-2xl border text-xs h-full flex flex-col justify-between shadow-xs transition-transform hover:scale-[1.02] ${dynamicColor}`}
                                                 >
                                                   <div>
-                                                    <p className="font-black tracking-tight text-gray-900 dark:text-white truncate">{assignment.subject}</p>
-                                                    <p className="text-[10px] opacity-80 font-semibold truncate mt-0.5 text-gray-600 dark:text-gray-300">
-                                                      👤 {assignment.teacherName ? assignment.teacherName.split('(')[0].trim() : 'Enseignant'}
-                                                    </p>
+                                                    <div className="flex items-center gap-1.5">
+                                                      <BookOpen size={12} className="opacity-70 shrink-0" />
+                                                      <p className="font-black tracking-tight text-gray-900 dark:text-white truncate uppercase">{assignment.subject}</p>
+                                                    </div>
+
+                                                    {/* Bloc Enseignant structuré selon la matière */}
+                                                    <div className="mt-1.5 p-1.5 rounded-xl bg-white/80 dark:bg-black/35 backdrop-blur-xs border border-black/5 dark:border-white/10 shadow-2xs">
+                                                      <div className="flex items-center gap-1.5">
+                                                        <div className="w-4 h-4 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                                                          <GraduationCap size={11} />
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                          <p className="text-[10px] font-black leading-tight truncate text-gray-900 dark:text-gray-100">
+                                                            {resolved.cleanName}
+                                                          </p>
+                                                          <span className="text-[8px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block truncate">
+                                                            Prof. {assignment.subject}
+                                                          </span>
+                                                        </div>
+                                                      </div>
+                                                    </div>
                                                   </div>
-                                                  <div className="flex items-center gap-1 mt-2 text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-white/70 dark:bg-black/20 px-2 py-0.5 rounded-md w-fit">
-                                                    <span>🏫 {assignment.room || 'Salle N/A'}</span>
+
+                                                  <div className="flex items-center gap-1 mt-1.5 text-[9.5px] font-black text-indigo-600 dark:text-indigo-400 bg-white/70 dark:bg-black/20 px-2 py-0.5 rounded-md w-fit">
+                                                    <MapPin size={9} className="text-red-500 shrink-0" />
+                                                    <span>{assignment.room || 'Salle N/A'}</span>
                                                   </div>
                                                 </div>
                                               );
