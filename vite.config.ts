@@ -17,9 +17,7 @@ export default defineConfig({
         globPatterns: [
           '**/*.{js,css,html,ico,png,svg}'
         ],
-
-        maximumFileSizeToCacheInBytes:
-          15 * 1024 * 1024
+        maximumFileSizeToCacheInBytes: 15 * 1024 * 1024
       }
     })
   ],
@@ -27,18 +25,6 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0'
-  },
-
-  resolve: {
-    extensions: [
-      '.mjs',
-      '.js',
-      '.mts',
-      '.ts',
-      '.jsx',
-      '.tsx',
-      '.json'
-    ]
   },
 
   build: {
