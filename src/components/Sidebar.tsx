@@ -191,29 +191,40 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                   return true;
                 }
                 
-                const role = (currentUser?.role as string) || '';
+                const rawRole = (currentUser?.role as string) || '';
+                const role = rawRole.toLowerCase().trim();
                 
-                // Direct filtered items for Teachers (enseignant) to avoid cognitive overload
-                if (role === 'enseignant') {
+                const isSuperOrAdmin = isSuperAdmin || role === 'admin' || role === 'directeur' || role.includes('admin') || role.includes('direction');
+                const isTeacher = role === 'enseignant' || role === 'teacher' || role === 'professeur' || role.includes('enseign') || role.includes('prof');
+                const isStudent = role === 'élève' || role === 'eleve' || role === 'student';
+                const isParent = role === 'parent';
+                const isCook = role === 'cuisinier' || role === 'cook';
+
+                if (isSuperOrAdmin) {
+                  return true;
+                }
+
+                // Direct filtered items for Teachers (enseignant, teacher, professeur)
+                if (isTeacher) {
                   const allowedTeacherTabs = [
                     'dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 
                     'digital_binder', 'online_courses', 'classroom', 'classes', 'courses_subjects', 
                     'homework', 'grades', 'planning', 'attendance', 'surveys', 
                     'ai_assistant', 'settings', 'trash'
                   ];
-                  if (!allowedTeacherTabs.includes(item.id)) return false;
+                  return allowedTeacherTabs.includes(item.id);
                 }
                 
                 // Direct filtered items for Parents to keep it simple and focused
-                if (role === 'parent') {
+                if (isParent) {
                   const allowedParentTabs = [
                     'dashboard', 'newsfeed', 'messaging', 'profile', 'digital_binder', 'online_courses', 'calendar', 'planning', 'homework', 'grades', 'houses', 'clubs', 'leaderboard', 'library', 'canteen', 'surveys', 'finance', 'settings'
                   ];
-                  if (!allowedParentTabs.includes(item.id)) return false;
+                  return allowedParentTabs.includes(item.id);
                 }
                 
                 // Direct filtered items for Students (élève)
-                if (role === 'élève' || role === 'eleve') {
+                if (isStudent) {
                   const allowedStudentTabs = [
                     'student_dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 
                     'digital_binder', 'online_courses', 'courses_subjects', 'classroom', 'grades', 'homework', 'student_card', 
@@ -223,11 +234,11 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 }
 
                 // Direct filtered items for Cooks (cuisinier)
-                if (role === 'cuisinier') {
+                if (isCook) {
                   const allowedCookTabs = [
                     'dashboard', 'canteen', 'settings'
                   ];
-                  if (!allowedCookTabs.includes(item.id)) return false;
+                  return allowedCookTabs.includes(item.id);
                 }
                 
                 if ((item.id === 'finance' || item.id === 'users' || item.id === 'dashboard') && (
@@ -237,7 +248,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 )) {
                   return true;
                 }
-                return item.roles.includes(role);
+                return item.roles.some(r => r.toLowerCase() === role || (isTeacher && r === 'enseignant') || (isStudent && (r === 'élève' || r === 'eleve')));
               })
               .sort((a, b) => {
                 const labelA = t(a.labelKey) || a.id;
