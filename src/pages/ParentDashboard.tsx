@@ -32,8 +32,10 @@ import {
   CreditCard,
   Download,
   TrendingDown,
-  Receipt
+  Receipt,
+  Eye
 } from 'lucide-react';
+import PDFViewerModal from '../components/PDFViewerModal';
 import { 
   AreaChart, 
   Area, 
@@ -124,6 +126,7 @@ export default function ParentDashboard({ onNavigate, initialTab }: { onNavigate
   const [matriculeToLink, setMatriculeToLink] = useState('');
   const [linkError, setLinkError] = useState('');
   const [linkSuccess, setLinkSuccess] = useState('');
+  const [viewingPdf, setViewingPdf] = useState<{ url: string; name: string; size?: number } | null>(null);
 
   useEffect(() => {
     if (initialTab) {
@@ -1036,6 +1039,18 @@ export default function ParentDashboard({ onNavigate, initialTab }: { onNavigate
                                   </div>
                                   <h4 className="font-bold text-gray-900 dark:text-white text-base truncate">{hw.title}</h4>
                                   <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{hw.description}</p>
+                                  {hw.fileUrl && (
+                                    <div className="mt-2.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => setViewingPdf({ url: hw.fileUrl, name: hw.fileName || 'Devoir.pdf', size: hw.fileSize })}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                                      >
+                                        <FileText size={14} className="text-red-600" />
+                                        <span>Afficher le PDF ({hw.fileName || 'Document joint'})</span>
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-3 self-start sm:self-center">
                                   {isCompleted ? (
@@ -1506,6 +1521,15 @@ export default function ParentDashboard({ onNavigate, initialTab }: { onNavigate
           )}
         </div>
       </div>
+      {viewingPdf && (
+        <PDFViewerModal
+          isOpen={!!viewingPdf}
+          onClose={() => setViewingPdf(null)}
+          fileUrl={viewingPdf.url}
+          fileName={viewingPdf.name}
+          fileSize={viewingPdf.size}
+        />
+      )}
     </div>
   );
 }
