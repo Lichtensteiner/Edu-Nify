@@ -1387,7 +1387,7 @@ export default function DigitalBinder({ onNavigate }: { onNavigate?: (tab: strin
                                   <div>
                                     <p className="text-xs font-black text-gray-900 dark:text-white">{getSlotHours(assignment.slotId)}</p>
                                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      {assignment.className} • {assignment.subject}
+                                      {assignment.className} • <span className="font-bold text-gray-800 dark:text-gray-200">{assignment.subject}</span> {assignment.teacherName ? `• 👤 ${assignment.teacherName.split('(')[0].trim()}` : ''}
                                     </p>
                                   </div>
                                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${statusColors}`}>
