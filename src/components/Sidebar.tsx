@@ -227,7 +227,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
                 if (isStudent) {
                   const allowedStudentTabs = [
                     'student_dashboard', 'newsfeed', 'directory', 'messaging', 'profile', 
-                    'digital_binder', 'online_courses', 'courses_subjects', 'classroom', 'grades', 'homework', 'student_card', 
+                    'digital_binder', 'Cours_en_Linge', 'courses_subjects', 'classroom', 'grades', 'homework', 'student_card', 
                     'canteen', 'planning', 'surveys', 'settings'
                   ];
                   return allowedStudentTabs.includes(item.id);
