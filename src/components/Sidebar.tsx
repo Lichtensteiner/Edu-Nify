@@ -69,7 +69,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobileOpen, setIsMo
     {
       title: t('schooling_category'),
       items: [
-        { id: 'online_courses', labelKey: 'online_courses', icon: Video, roles: ['admin', 'enseignant', 'élève', 'parent'] },
+        { id: 'Cours_en_Ligne', labelKey: 'Cours_en_Ligne', icon: Video, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'digital_binder', labelKey: 'digital_binder', icon: FolderClosed, roles: ['admin', 'enseignant', 'élève', 'parent'] },
         { id: 'classroom', labelKey: 'classroom', icon: GraduationCap, roles: ['admin', 'enseignant', 'élève'] },
         { id: 'homework', labelKey: 'homework', icon: BookOpen, roles: ['admin', 'enseignant', 'élève', 'parent'] },
